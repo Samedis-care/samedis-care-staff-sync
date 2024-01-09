@@ -1,0 +1,19 @@
+import_file: "import/import.xlsx"
+auth:
+  uri: "https://ident.services"
+  client_id: "sync-account@yourdomain.com"
+  client_secret: "your-sync-account-client-secret"
+samedis:
+  uri: "https://sync.samedis.care"
+  api_version: "v4"
+  tenant_id: "63f5c0491b57cc000df2b2c7"
+logging:
+  # 0: off 1: on 2: debug
+  level: 1
+  # 0: none 1: console 2: logfile 3: console & logfile
+  mode: 2
+http:
+  valid_certificate: true
+  proxy: ""
+  proxy_username: ""
+  proxy_password: ""
