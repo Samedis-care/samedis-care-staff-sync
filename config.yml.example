@@ -16,6 +16,8 @@ http:
   proxy: ""
   proxy_username: ""
   proxy_password: ""
+# choose excel, sql
+import_mode: "sql"
 import_file: "import/import.xlsx"
 import_sql:
   # SqlServer, MySql, SQLite, Oracle
