@@ -1,4 +1,3 @@
-import_file: "import/import.xlsx"
 auth:
   uri: "https://ident.services"
   client_id: "sync-account@yourdomain.com"
@@ -17,3 +16,16 @@ http:
   proxy: ""
   proxy_username: ""
   proxy_password: ""
+# choose excel, sql
+import_mode: "sql"
+import_file: "import/import.xlsx"
+import_sql:
+  # SqlServer, MySql, SQLite, Oracle
+  database_type: SqlServer
+  server: "your_server"
+  port: "your_port"
+  database: "your_database"
+  username: "your_username"
+  password: "your_password"
+  allow_public_key_retrieval: true # Only applicable for MySQL
+  staff_query: "import/_export_staff.sql"

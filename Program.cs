@@ -18,92 +18,96 @@ internal class Program
 
     // read config
     var ymlFilePath = "config.yml";
-    if ( !File.Exists(ymlFilePath) )
+    if (!File.Exists(ymlFilePath))
       helper.MessageAndExit($"The file {ymlFilePath} does not exists. Stopping Import.");
 
-    var settings = new ConfigProviderYaml(ymlFilePath);
+    AppConfig config = AppConfig.LoadFromYaml(ymlFilePath);
 
-    var authenticationUrl = settings.Get<string>("auth.uri");
-    var clientId = settings.Get<string>("auth.client_id");
-    var clientSecret = settings.Get<string>("auth.client_secret");
-    var samedisUrl = settings.Get<string>("samedis.uri");
-    var apiVersion = settings.Get<string>("samedis.api_version");
-    var tenantId = settings.Get<string>("samedis.tenant_id");
-    var proxy = settings.Get<string>("http.proxy");
-    var proxyUser = settings.Get<string>("http.proxy_username");
-    var proxyPass = settings.Get<string>("http.proxy_password");
-    var validateCertificate = settings.Get<bool>("http.valid_certificate");
-    helper.LogLevel = settings.Get<int>("logging.level");
-    helper.LogMode = settings.Get<int>("logging.mode");
+    helper.LogLevel = config.Logging.Level;
+    helper.LogMode = config.Logging.Mode;
 
     helper.Message("Sync started.", 1);
 
+    var importMode = config.ImportMode;
+
     // import file exists?
-    var importFile = settings.Get<string>("import_file");
-    if ( !File.Exists(importFile) ) {
+    var importFile = config.ImportFile;
+    if (!File.Exists(importFile))
+    {
       helper.Message($"The file {importFile} does not exists. Stopping Import.", 1, "ERROR");
       return;
     }
 
     // init authentication
-    if ( authenticationUrl.Length == 0 || clientId.Length == 0 || clientSecret.Length == 0) {
+    if (config.Auth.Uri.Length == 0 || config.Auth.ClientId.Length == 0 || config.Auth.ClientSecret.Length == 0)
+    {
       helper.Message($"Authentication configuration invalid, please check config.yml.", 1, "ERROR");
       return;
     }
-    var samedisAuth = new SamedisAuthenticator(authenticationUrl, clientId, clientSecret) {
-      Proxy = proxy,
-      ProxyUsername = proxyUser,
-      ProxyPassword = proxyPass,
-      ValidateCertificate = validateCertificate,
+    var samedisAuth = new SamedisAuthenticator(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret)
+    {
+      Proxy = config.Http.Proxy,
+      ProxyUsername = config.Http.ProxyUsername,
+      ProxyPassword = config.Http.ProxyPassword,
+      ValidateCertificate = config.Http.ValidCertificate,
     };
     samedisAuth.GetCurrentUser();
     helper.Message($"Credential checkup Status: {samedisAuth.StatusCode} {samedisAuth.Status} User: {samedisAuth.CurrentUser}", 1);
     var bearerToken = samedisAuth.BearerToken;
 
     //define resource
-    var staffResource = $"/api/{apiVersion}/tenants/{tenantId}/staffs";
-    var samedisClient = new RequestData(samedisUrl, bearerToken)
+    var staffResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/staffs";
+    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken)
     {
-      Proxy = proxy,
-      ProxyUsername = proxyUser,
-      ProxyPassword = proxyPass,
-      ValidateCertificate = validateCertificate,
+      Proxy = config.Http.Proxy,
+      ProxyUsername = config.Http.ProxyUsername,
+      ProxyPassword = config.Http.ProxyPassword,
+      ValidateCertificate = config.Http.ValidCertificate,
     };
 
     //check permissions
     var requestResource = staffResource + "?limit=0";
     var client = samedisClient.Get(requestResource);
-    if ( samedisClient.StatusCode >= 400 ) {
+    if (samedisClient.StatusCode >= 400)
+    {
       var record = JsonConvert.DeserializeObject<Staffs.Root>(client);
       helper.Message($"Sync stopped. {samedisClient.StatusCode} {record.Meta.Msg.Message}", 1, "ERROR");
       return;
     }
 
-    // read excel file
-    System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-    using var stream = File.Open(importFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+    DataSet result = new();
 
-    // Auto-detect format, supports:
-    //  - Binary Excel files (2.0-2003 format; *.xls)
-    //  - OpenXml Excel files (2007 format; *.xlsx, *.xlsb)
-    using var reader = ExcelReaderFactory.CreateReader(stream);
-
-    var result = reader.AsDataSet(new ExcelDataSetConfiguration()
+    if (config.ImportMode == "excel")
     {
-      UseColumnDataType = true,
-      FilterSheet = (tableReader, sheetIndex) => true,
-      ConfigureDataTable = (tableReader) => new ExcelDataTableConfiguration()
-      {
-        EmptyColumnNamePrefix = "Column",
-        UseHeaderRow = true,
-      }
-    });
+      // read excel file
+      System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+      using var stream = File.Open(importFile, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-    // validate excel * excel format equal to export
-    string[] excelColumns = {"Nachname","Vorname","Personalnummer","Eintrittsdatum","Austrittsdatum","E-Mail","Titel","Bemerkungen","Handynummer"}; //,"Id"};
-    // import excel format
-    //string[] excelColumns = {"Titel","Nachname","Mitarbeiternr.","E-Mail","Titel","Notizen","Handynummer","Beitritt am","Austritt am"};
-    if (!Helper.CheckColumnsExist(result.Tables[0], excelColumns))
+      // Auto-detect format, supports:
+      //  - Binary Excel files (2.0-2003 format; *.xls)
+      //  - OpenXml Excel files (2007 format; *.xlsx, *.xlsb)
+      using var reader = ExcelReaderFactory.CreateReader(stream);
+      result = reader.AsDataSet(new ExcelDataSetConfiguration()
+      {
+        UseColumnDataType = true,
+        FilterSheet = (tableReader, sheetIndex) => true,
+        ConfigureDataTable = (tableReader) => new ExcelDataTableConfiguration()
+        {
+          EmptyColumnNamePrefix = "Column",
+          UseHeaderRow = true,
+        }
+      });
+    }
+    else
+    {
+      string connectionString = DbHelper.GetConnectionString(config.ImportSql);
+      string sqlQuery = File.ReadAllText(config.ImportSql.StaffQuery);
+      result = DbHelper.ExecuteQuery(config.ImportSql.DatabaseType, connectionString, sqlQuery);
+    }
+
+    // column definition and check
+    string[] importColumns = { "Nachname", "Vorname", "Personalnummer", "Eintrittsdatum", "Austrittsdatum", "E-Mail", "Titel", "Bemerkungen", "Handynummer" }; //,"Id"};
+    if (!Helper.CheckColumnsExist(result.Tables[0], importColumns))
       helper.MessageAndExit("Invalid Excel file, stopping import.");
 
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
@@ -127,7 +131,8 @@ internal class Program
         else
           helper.MessageAndExit($"Invalid left date found in Excel: {row["Eintrittsdatum"]}");
         var tmpLeft = row["Austrittsdatum"].ToString();
-        if ( tmpLeft?.ToString().Length > 0 ) {
+        if (tmpLeft?.ToString().Length > 0)
+        {
           if (DateTime.TryParse(row["Austrittsdatum"].ToString(), out DateTime parsedLeft))
             tmpLeft = parsedLeft.ToString("dd.MM.yyyy");
           else
@@ -150,7 +155,7 @@ internal class Program
         };
 
         // check for Id, if exists, include
-        if (Helper.CheckColumnsExist(result.Tables[0], new string[] {"Id"}))
+        if (Helper.CheckColumnsExist(result.Tables[0], new string[] { "Id" }))
           attributes.Id = row["Id"].ToString();
 
         // Convert Staff object to JObject
@@ -173,7 +178,7 @@ internal class Program
         // check if exists
         requestResource = staffResource;
         requestResource += attributes.Id != null
-                        ? $"/{attributes.Id}" 
+                        ? $"/{attributes.Id}"
                         : filter.Replace("_EMPLOYEENO_", row["Personalnummer"].ToString(), StringComparison.OrdinalIgnoreCase);
 
         client = samedisClient.Get(requestResource);
@@ -181,12 +186,15 @@ internal class Program
         var totalRecords = record != null ? record.Meta.Total : 0;
 
         // put or post
-        if ( totalRecords > 0 ) {
+        if (totalRecords > 0)
+        {
           var recordId = record.Data[0].Attributes.Id;
           helper.Message($"Staff EmployeeNo {row["Personalnummer"]} exists with record {recordId}", 2);
           client = samedisClient.Put(staffResource, recordId, staffBody);
           helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
-        } else {
+        }
+        else
+        {
           helper.Message($"Staff EmployeeNo {row["Personalnummer"]} does not exists", 2);
           client = samedisClient.Post(staffResource, staffBody);
           helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
