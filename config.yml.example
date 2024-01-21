@@ -18,6 +18,7 @@ http:
   proxy_password: ""
 import_file: "import/import.xlsx"
 import_sql:
+  # SqlServer, MySql, SQLite, Oracle
   database_type: SqlServer
   server: "your_server"
   port: "your_port"

@@ -20,30 +20,14 @@ namespace SamedisStaffSync
     public static DataSet ExecuteQuery(DatabaseType provider, string connectionString, string query)
     {
       DataSet dataSet = new();
-
-      DbProviderFactory factory;
-      switch (provider)
+      DbProviderFactory factory = provider switch
       {
-        case DatabaseType.SqlServer:
-          factory = System.Data.SqlClient.SqlClientFactory.Instance;
-          break;
-
-        case DatabaseType.MySql:
-          factory = MySql.Data.MySqlClient.MySqlClientFactory.Instance;
-          break;
-
-        case DatabaseType.SQLite:
-          factory = Microsoft.Data.Sqlite.SqliteFactory.Instance;
-          break;
-
-        case DatabaseType.Oracle:
-          factory = Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance;
-          break;
-
-        default:
-          throw new NotSupportedException("Unsupported database type");
-      }
-
+        DatabaseType.SqlServer => System.Data.SqlClient.SqlClientFactory.Instance,
+        DatabaseType.MySql => MySql.Data.MySqlClient.MySqlClientFactory.Instance,
+        DatabaseType.SQLite => Microsoft.Data.Sqlite.SqliteFactory.Instance,
+        DatabaseType.Oracle => Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance,
+        _ => throw new NotSupportedException("Unsupported database type"),
+      };
       using (DbConnection connection = factory.CreateConnection())
       {
         connection.ConnectionString = connectionString;

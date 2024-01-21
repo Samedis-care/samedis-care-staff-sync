@@ -9,4 +9,4 @@ SELECT Vorname
   , Handynummer
   , [Beitritt am] AS Eintrittsdatum
   , [Austritt am] AS Austrittsdatum
-FROM StaffImport LIMIT 1000;
+FROM StaffImport;
