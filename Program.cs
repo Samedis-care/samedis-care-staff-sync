@@ -106,11 +106,12 @@ internal class Program
     }
 
     // column definition and check
-    string[] importColumns = { "Nachname", "Vorname", "Personalnummer", "Eintrittsdatum", "Austrittsdatum", "E-Mail", "Titel", "Bemerkungen", "Handynummer" }; //,"Id"};
+    string[] importColumns = { "Nachname", "Vorname", "Personalnummer", "Eintrittsdatum", "Austrittsdatum", "E-Mail", "Titel", "Bemerkungen", "Handynummer", "Id" }; //,"Id"};
     if (!Helper.CheckColumnsExist(result.Tables[0], importColumns))
       helper.MessageAndExit("Invalid Excel file, stopping import.");
 
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
+    var idfilter = "?gridfilter={\"id\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_ID_\"}}";
 
     foreach (DataTable table in result.Tables)
     {
@@ -178,7 +179,7 @@ internal class Program
         // check if exists
         requestResource = staffResource;
         requestResource += attributes.Id != null
-                        ? $"/{attributes.Id}"
+                        ? idfilter.Replace("_ID_", attributes.Id, StringComparison.OrdinalIgnoreCase)
                         : filter.Replace("_EMPLOYEENO_", row["Personalnummer"].ToString(), StringComparison.OrdinalIgnoreCase);
 
         client = samedisClient.Get(requestResource);
