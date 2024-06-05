@@ -20,7 +20,7 @@ namespace SamedisStaffSync
       public string? Avatar { get; set; }
 
       [JsonProperty("catalog_ids")]
-      public List<string>? CatalogIds { get; set; }
+      public List<string>? CatalogIds { get; }
 
       [JsonProperty("email")]
       public string? Email { get; set; }

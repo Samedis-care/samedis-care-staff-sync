@@ -15,6 +15,7 @@ namespace SamedisStaffSync
     public string ImportMode { get; set; } = "excel";
     public string ImportFile { get; set; } = "";
     public ImportSqlConfig ImportSql { get; set; } = new ImportSqlConfig();
+    public LdapConfig ImportLdap { get; set; } = new LdapConfig();
 
     public static AppConfig LoadFromYaml(string filePath)
     {
@@ -66,4 +67,14 @@ namespace SamedisStaffSync
     public string StaffQuery { get; set; }
   }
 
+  public class LdapConfig
+  {
+    public string Server { get; set; }
+    public bool Ssl { get; set; }
+    public string Path { get; set; }
+    public string Username { get; set; }
+    public string Password { get; set; }
+    public string Mapping { get; set; }
+    public string Filter { get; set; }
+  }
 }
