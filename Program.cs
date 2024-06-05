@@ -22,21 +22,12 @@ internal class Program
       helper.MessageAndExit($"The file {ymlFilePath} does not exists. Stopping Import.");
 
     AppConfig config = AppConfig.LoadFromYaml(ymlFilePath);
+    if ( config == null) Environment.Exit(1);
 
     helper.LogLevel = config.Logging.Level;
     helper.LogMode = config.Logging.Mode;
 
     helper.Message("Sync started.", 1);
-
-    var importMode = config.ImportMode;
-
-    // import file exists?
-    var importFile = config.ImportFile;
-    if (!File.Exists(importFile))
-    {
-      helper.Message($"The file {importFile} does not exists. Stopping Import.", 1, "ERROR");
-      return;
-    }
 
     // init authentication
     if (config.Auth.Uri.Length == 0 || config.Auth.ClientId.Length == 0 || config.Auth.ClientSecret.Length == 0)
@@ -44,71 +35,76 @@ internal class Program
       helper.Message($"Authentication configuration invalid, please check config.yml.", 1, "ERROR");
       return;
     }
-    var samedisAuth = new SamedisAuthenticator(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret)
+
+    var httpSettings = new HttpSettings()
     {
       Proxy = config.Http.Proxy,
       ProxyUsername = config.Http.ProxyUsername,
       ProxyPassword = config.Http.ProxyPassword,
       ValidateCertificate = config.Http.ValidCertificate,
     };
-    samedisAuth.GetCurrentUser();
-    helper.Message($"Credential checkup Status: {samedisAuth.StatusCode} {samedisAuth.Status} User: {samedisAuth.CurrentUser}", 1);
+
+    var samedisAuth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, httpSettings);
+    helper.Message($"Credential checkup Status: {samedisAuth.StatusCode} {samedisAuth.Status} User: {samedisAuth.User}", 1);
     var bearerToken = samedisAuth.BearerToken;
 
     //define resource
+    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings);
     var staffResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/staffs";
-    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken)
-    {
-      Proxy = config.Http.Proxy,
-      ProxyUsername = config.Http.ProxyUsername,
-      ProxyPassword = config.Http.ProxyPassword,
-      ValidateCertificate = config.Http.ValidCertificate,
-    };
 
     //check permissions
-    var requestResource = staffResource + "?limit=0";
-    var client = samedisClient.Get(requestResource);
-    if (samedisClient.StatusCode >= 400)
-    {
-      var record = JsonConvert.DeserializeObject<Staffs.Root>(client);
-      helper.Message($"Sync stopped. {samedisClient.StatusCode} {record.Meta.Msg.Message}", 1, "ERROR");
-      return;
-    }
+    helper.CanDo(samedisClient, staffResource);
 
     DataSet result = new();
 
-    if (config.ImportMode == "excel")
+    switch (config.ImportMode)
     {
-      // read excel file
-      System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-      using var stream = File.Open(importFile, FileMode.Open, FileAccess.Read, FileShare.Read);
-
-      // Auto-detect format, supports:
-      //  - Binary Excel files (2.0-2003 format; *.xls)
-      //  - OpenXml Excel files (2007 format; *.xlsx, *.xlsb)
-      using var reader = ExcelReaderFactory.CreateReader(stream);
-      result = reader.AsDataSet(new ExcelDataSetConfiguration()
-      {
-        UseColumnDataType = true,
-        FilterSheet = (tableReader, sheetIndex) => true,
-        ConfigureDataTable = (tableReader) => new ExcelDataTableConfiguration()
+      case "excel":
+        // import file exists?
+        var importFile = config.ImportFile;
+        if (!File.Exists(importFile))
         {
-          EmptyColumnNamePrefix = "Column",
-          UseHeaderRow = true,
+          helper.Message($"The file {importFile} does not exists. Stopping Import.", 1, "ERROR");
+          return;
         }
-      });
-    }
-    else
-    {
-      string connectionString = DbHelper.GetConnectionString(config.ImportSql);
-      string sqlQuery = File.ReadAllText(config.ImportSql.StaffQuery);
-      result = DbHelper.ExecuteQuery(config.ImportSql.DatabaseType, connectionString, sqlQuery);
+
+        // read excel file
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        using (var stream = File.Open(importFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+
+          // Auto-detect format, supports:
+          //  - Binary Excel files (2.0-2003 format; *.xls)
+          //  - OpenXml Excel files (2007 format; *.xlsx, *.xlsb)
+          using (var reader = ExcelReaderFactory.CreateReader(stream))
+          {
+            result = reader.AsDataSet(new ExcelDataSetConfiguration()
+            {
+              UseColumnDataType = true,
+              FilterSheet = (tableReader, sheetIndex) => true,
+              ConfigureDataTable = (tableReader) => new ExcelDataTableConfiguration()
+              {
+                EmptyColumnNamePrefix = "Column",
+                UseHeaderRow = true,
+              }
+            });
+          }
+        }
+        break;
+      case "sql":
+        string connectionString = DbHelper.GetConnectionString(config.ImportSql);
+        string sqlQuery = File.ReadAllText(config.ImportSql.StaffQuery);
+        result = DbHelper.ExecuteQuery(config.ImportSql.DatabaseType, connectionString, sqlQuery);
+        break;
+      case "ldap":
+        result = LdapHelper.FillDirectory(config.ImportLdap.Server, config.ImportLdap.Ssl, config.ImportLdap.Path, config.ImportLdap.Username, config.ImportLdap.Password, config.ImportLdap.Mapping, config.ImportLdap.Filter, helper);
+        break;
     }
 
     // column definition and check
-    string[] importColumns = { "Nachname", "Vorname", "Personalnummer", "Eintrittsdatum", "Austrittsdatum", "E-Mail", "Titel", "Bemerkungen", "Handynummer", "Id" }; //,"Id"};
+    string[] importColumns = { "Nachname", "Vorname", "Personalnummer", "Eintrittsdatum", "Austrittsdatum", "E-Mail", "Titel", "Bemerkungen", "Handynummer" }; //,"Id"};
     if (!Helper.CheckColumnsExist(result.Tables[0], importColumns))
-      helper.MessageAndExit("Invalid Excel file, stopping import.");
+      helper.MessageAndExit("Invalid Column mapping, stopping import.");
 
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
     var idfilter = "?gridfilter={\"id\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_ID_\"}}";
@@ -121,25 +117,37 @@ internal class Program
       foreach (DataRow row in table.Rows)
       {
         //validate employee no
-        var tmpEmpl = !string.IsNullOrEmpty(row["Personalnummer"].ToString())
-                    ? row["Personalnummer"].ToString()
-                    : helper.MessageAndExit($"Missing EmployeeNo for \"{row["Nachname"]}\".");
+        var tmpEmpl = row["Personalnummer"].ToString();
+        if (string.IsNullOrEmpty(tmpEmpl))
+        {
+          helper.Message($"SKIP: Missing EmployeeNo for \"{row["Nachname"]}\".");
+          continue;
+        }
 
         //validate date fields
         var tmpJoin = row["Eintrittsdatum"].ToString();
-        if (DateTime.TryParse(row["Eintrittsdatum"].ToString(), out DateTime parsedJoin))
+        if (helper.TryParseDate(tmpJoin, out DateTime parsedJoin))
           tmpJoin = parsedJoin.ToString("dd.MM.yyyy");
         else
-          helper.MessageAndExit($"Invalid left date found in Excel: {row["Eintrittsdatum"]}");
+        {
+          helper.Message($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Eintrittsdatum"]}");
+          continue;
+        }
         var tmpLeft = row["Austrittsdatum"].ToString();
         if (tmpLeft?.ToString().Length > 0)
         {
-          if (DateTime.TryParse(row["Austrittsdatum"].ToString(), out DateTime parsedLeft))
+          if (helper.TryParseDate(tmpLeft, out DateTime parsedLeft))
             tmpLeft = parsedLeft.ToString("dd.MM.yyyy");
           else
-            helper.MessageAndExit($"Invalid left date found in Excel: {row["Austrittsdatum"]}");
+          {
+            helper.Message($"SKIP: Invalid left date for \"{row["Nachname"]}\": {row["Austrittsdatum"]}");
+            continue;
+          }
           if (Convert.ToDateTime(tmpLeft) < Convert.ToDateTime(tmpJoin))
-            helper.MessageAndExit($"Left date {row["Austrittsdatum"]} is before join date {row["Eintrittsdatum"]} for \"{row["Nachname"]}\".");
+          {
+            helper.Message($"SKIP: Left date {row["Austrittsdatum"]} is before join date {row["Eintrittsdatum"]} for \"{row["Nachname"]}\".");
+            continue;
+          }
         }
 
         var attributes = new Staffs.Attributes
@@ -177,12 +185,12 @@ internal class Program
         helper.Message(staffBody, 2);
 
         // check if exists
-        requestResource = staffResource;
+        var requestResource = staffResource;
         requestResource += attributes.Id != null
                         ? idfilter.Replace("_ID_", attributes.Id, StringComparison.OrdinalIgnoreCase)
                         : filter.Replace("_EMPLOYEENO_", row["Personalnummer"].ToString(), StringComparison.OrdinalIgnoreCase);
 
-        client = samedisClient.Get(requestResource);
+        var client = samedisClient.Get(requestResource);
         var record = JsonConvert.DeserializeObject<Staffs.Root>(client);
         var totalRecords = record != null ? record.Meta.Total : 0;
 

@@ -23,13 +23,13 @@ To access Samedis.care you need internet access. If this requires a proxy server
 
 ## Import mode
 
-You can choose Excel or a sql server as source.
+You can choose Ldap (Active Directory), Excel or a SQL server as source.
 
 ```
 import_mode: "sql"
 ```
 
-Enter `excel` or `sql` as mode. Regarding your chosen mode you need to adjust the configuration file in the excel or sql section.
+Enter `ldap`, `excel` or `sql` as mode. Regarding your chosen mode you need to adjust the configuration file in the excel or sql section.
 
 ## Excel Import file
 
@@ -43,3 +43,32 @@ You can configure and setup a source to get your data from a sql server source.
 Instead of using and excel file you can modify `import/_export_staff.sql` to your own requirements.
 
 > It is mandatory that the column names match the names of the sql example query.
+
+## Ldap server import
+
+If you want to get your staff users from an active directory (LDAP) server this is supported now, too.
+In this case you do have to setup the `config.yml` with the correct parameters
+
+Most of the parameters in `config.yml.example` are self-explanatory. However, the values `filter` and `mapping` must be explained.
+
+```
+  filter: "(&(objectCategory=person)(objectClass=user))"
+```
+
+This will be your filter what elements will be imported. Here you can add more filters, for example if you like to import only those users where `extensionAttribute4` is filled the filter would be like
+
+```
+  filter: "(&(objectCategory=person)(objectClass=user)(extensionAttribute4=*))"
+```
+
+With `Mapping` you can specify/change the fields of your directory server that are to be imported.
+The example file contains the default mapping, and it is **mandatory** that all fields are mapped.
+
+For example if you want to read your employee number from the field `extensionAttribute4` and fill the Samedis.care `notes` field from the active directory `info` field instead of the description field, then the mapping would ne like this:
+
+```
+  mapping: "{ \"Nachname\": \"sn\", \"Vorname\": \"givenName\", \"Personalnummer\": \"extensionAttribute4\", \"Eintrittsdatum\": \"whenCreated\", \"Austrittsdatum\": \"extensionAttribute10\", \"E-Mail\": \"mail\", \"Titel\": \"title\", \"Bemerkungen\": \"info\", \"Handynummer\": \"mobile\" }"
+```
+
+**Note:** If you do deactivate the user in your active directory we will set the `left` date to the timestamp of the sync as alternative, if you can not provide a proper field (in our example it is `extensionAttribute10`) to define the date the employee left.
+

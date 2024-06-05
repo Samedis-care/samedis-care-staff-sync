@@ -29,3 +29,11 @@ import_sql:
   password: "your_password"
   allow_public_key_retrieval: true # Only applicable for MySQL
   staff_query: "import/_export_staff.sql"
+import_ldap:
+  server: "yourserver.local"
+  path: "ou=YourOrgUnit,dc=test,dc=local"
+  ssl: false
+  username: "your_username"
+  password: "your_password"
+  filter: "(&(objectCategory=person)(objectClass=user))"
+  mapping: "{ \"Nachname\": \"sn\", \"Vorname\": \"givenName\", \"Personalnummer\": \"employeeID\", \"Eintrittsdatum\": \"whenCreated\", \"Austrittsdatum\": \"extensionAttribute10\", \"E-Mail\": \"mail\", \"Titel\": \"title\", \"Bemerkungen\": \"description\", \"Handynummer\": \"mobile\" }"
