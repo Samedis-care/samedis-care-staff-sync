@@ -7,9 +7,9 @@ namespace SamedisStaffSync
 {
   public class HttpSettings
   {
-    public string Proxy { get; set; }
-    public string ProxyUsername { get; set; }
-    public string ProxyPassword { get; set; }
+    public string? Proxy { get; set; }
+    public string? ProxyUsername { get; set; }
+    public string? ProxyPassword { get; set; }
     public bool ValidateCertificate { get; set; }
   }
 
@@ -41,12 +41,15 @@ namespace SamedisStaffSync
       Status = response.StatusCode;
       StatusCode = (int)Status;
 
-      var root = JsonConvert.DeserializeObject<JObject>(response.Content);
-      var meta = root["meta"];
-      var data = root["data"];
-      BearerToken = meta["token"]?.ToString();
-      RefreshToken = meta["refresh_token"]?.ToString();
-      User = data["attributes"]["email"]?.ToString();
+      if (response != null)
+      {
+        var root = JsonConvert.DeserializeObject<JObject>(response.Content);
+        var meta = root["meta"];
+        var data = root["data"];
+        BearerToken = meta["token"]?.ToString();
+        RefreshToken = meta["refresh_token"]?.ToString();
+        User = data["attributes"]["email"]?.ToString();
+      }
     }
   }
 
@@ -57,7 +60,7 @@ namespace SamedisStaffSync
     private readonly string _baseUrl;
     private readonly string _token;
     private readonly RestClientOptions _options;
-    private readonly WebProxy _proxy;
+    private readonly WebProxy? _proxy;
 
     public RequestData(string baseUrl, string token, HttpSettings proxySettings)
     {

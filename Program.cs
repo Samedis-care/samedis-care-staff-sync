@@ -22,6 +22,7 @@ internal class Program
       helper.MessageAndExit($"The file {ymlFilePath} does not exists. Stopping Import.");
 
     AppConfig config = AppConfig.LoadFromYaml(ymlFilePath);
+    if ( config == null) Environment.Exit(1);
 
     helper.LogLevel = config.Logging.Level;
     helper.LogMode = config.Logging.Mode;
