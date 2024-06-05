@@ -14,10 +14,10 @@ namespace SamedisStaffSync
       public string? Account { get; set; }
 
       [JsonProperty("administered_briefings_count")]
-      public int? AdministeredBriefingsCount { get; set; }
+      public int? AdministeredBriefingsCount { get; }
 
       [JsonProperty("avatar")]
-      public string? Avatar { get; set; }
+      public string? Avatar { get; }
 
       [JsonProperty("catalog_ids")]
       public List<string>? CatalogIds { get; }
@@ -32,7 +32,7 @@ namespace SamedisStaffSync
       public string? FirstName { get; set; }
 
       [JsonProperty("ident_user_id")]
-      public string? IdentUserId { get; set; }
+      public string? IdentUserId { get; }
 
       [JsonProperty("joined")]
       public string? Joined { get; set; }
@@ -47,7 +47,7 @@ namespace SamedisStaffSync
       public bool? LoginAllowed { get; set; }
 
       [JsonProperty("manufacturer_catalog_ids")]
-      public List<string>? ManufacturerCatalogIds { get; set; }
+      public List<string>? ManufacturerCatalogIds { get; }
 
       [JsonProperty("mobile_number")]
       public string? MobileNumber { get; set; }
