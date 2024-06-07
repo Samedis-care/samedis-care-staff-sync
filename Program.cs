@@ -22,12 +22,18 @@ internal class Program
       helper.MessageAndExit($"The file {ymlFilePath} does not exists. Stopping Import.");
 
     AppConfig config = AppConfig.LoadFromYaml(ymlFilePath);
-    if ( config == null) Environment.Exit(1);
+    if (config == null) Environment.Exit(1);
 
     helper.LogLevel = config.Logging.Level;
     helper.LogMode = config.Logging.Mode;
 
     helper.Message("Sync started.", 1);
+
+    // last run
+    string filePath = "lastrun.txt";
+    DateTime currentTimestamp = DateTime.Now;
+    DateTime lastRun = File.Exists(filePath) ? Convert.ToDateTime(File.ReadAllText(filePath)) : currentTimestamp;
+    File.WriteAllText(filePath, currentTimestamp.ToString());
 
     // init authentication
     if (config.Auth.Uri.Length == 0 || config.Auth.ClientId.Length == 0 || config.Auth.ClientSecret.Length == 0)
@@ -97,7 +103,7 @@ internal class Program
         result = DbHelper.ExecuteQuery(config.ImportSql.DatabaseType, connectionString, sqlQuery);
         break;
       case "ldap":
-        result = LdapHelper.FillDirectory(config.ImportLdap.Server, config.ImportLdap.Ssl, config.ImportLdap.Path, config.ImportLdap.Username, config.ImportLdap.Password, config.ImportLdap.Mapping, config.ImportLdap.Filter, helper);
+        result = LdapHelper.FillDirectory(config.ImportLdap.Server, config.ImportLdap.Ssl, config.ImportLdap.Path, config.ImportLdap.Username, config.ImportLdap.Password, config.ImportLdap.Mapping, config.ImportLdap.Filter, helper, lastRun);
         break;
     }
 

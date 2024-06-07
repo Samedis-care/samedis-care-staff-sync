@@ -9,7 +9,7 @@ namespace SamedisStaffSync
 {
   class LdapHelper
   {
-    public static DataSet FillDirectory(string ldapServer, bool Ssl, string ldapPath, string userName, string password, string jsonMapping, string filter, Helper helper)
+    public static DataSet FillDirectory(string ldapServer, bool Ssl, string ldapPath, string userName, string password, string jsonMapping, string filter, Helper helper, DateTime lastRun)
     {
       var mapping = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonMapping);
       DataSet dataSet = new();
@@ -46,6 +46,8 @@ namespace SamedisStaffSync
 
           var propertiesToLoad = new List<string>(mapping.Values);
           propertiesToLoad.Add("userAccountControl");
+          propertiesToLoad.Add("whenChanged");
+
           var searchRequest = new SearchRequest(ldapPath, filter, SearchScope.Subtree, propertiesToLoad.ToArray());
 
           // Send the search request
@@ -54,6 +56,24 @@ namespace SamedisStaffSync
           // Iterate over results and add rows to DataTable
           foreach (SearchResultEntry entry in searchResponse.Entries)
           {
+            if (entry.Attributes["whenChanged"]?.Count > 0)
+            {
+              string whenChangedString = entry.Attributes["whenChanged"][0].ToString();
+              if (DateTime.TryParseExact(whenChangedString, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime whenChanged))
+              {
+                if (whenChanged <= lastRun)
+                {
+                  helper.Message($"SKIP: record not changed", 2);
+                  continue; // Skip records that have not been changed since the last run
+                }
+              }
+              else
+              {
+                helper.Message($"Failed to parse whenChanged value: {whenChangedString}");
+                continue; // Skip records with invalid whenChanged value
+              }
+            }
+
             DataRow row = dataTable.NewRow();
             foreach (var column in mapping)
             {
