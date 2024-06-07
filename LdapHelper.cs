@@ -31,6 +31,9 @@ namespace SamedisStaffSync
           ldapConnection.Credential = credentials;
           ldapConnection.AuthType = AuthType.Basic;
 
+          // Set LDAP version to 3
+          ldapConnection.SessionOptions.ProtocolVersion = 3;
+
           // Optional: Use SSL/TLS
           if (Ssl)
           {
