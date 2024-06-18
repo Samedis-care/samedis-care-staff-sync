@@ -41,7 +41,7 @@ namespace SamedisStaffSync
       Status = response.StatusCode;
       StatusCode = (int)Status;
 
-      if (response != null)
+      if (response.Content != null)
       {
         var root = JsonConvert.DeserializeObject<JObject>(response.Content);
         var meta = root["meta"];
