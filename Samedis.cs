@@ -29,6 +29,17 @@ namespace SamedisStaffSync
       {
         options.RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true;
       }
+
+      if (!string.IsNullOrEmpty(proxySettings.Proxy))
+      {
+        var proxy = new WebProxy(proxySettings.Proxy);
+        if (!string.IsNullOrEmpty(proxySettings.ProxyUsername))
+        {
+          proxy.Credentials = new NetworkCredential(proxySettings.ProxyUsername, proxySettings.ProxyPassword);
+        }
+        options.Proxy = proxy;
+      }
+
       using var client = new RestClient(options);
       var request = new RestRequest("api/v1/samedis.care/oauth/token", Method.Post)
         .AddHeader("accept", "application/json")

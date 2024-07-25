@@ -9,7 +9,9 @@ namespace SamedisStaffSync
     {
       return config.DatabaseType switch
       {
-        DatabaseType.SqlServer => $"Data Source={config.Server},{config.Port};Initial Catalog={config.Database};User Id={config.Username};Password={config.Password};",
+        DatabaseType.SqlServer => !string.IsNullOrEmpty(config.Port)
+                                ? $"Data Source={config.Server},{config.Port};Initial Catalog={config.Database};User Id={config.Username};Password={config.Password};"
+                                : $"Data Source={config.Server};Initial Catalog={config.Database};User Id={config.Username};Password={config.Password};",
         DatabaseType.MySql => $"Server={config.Server};Port={config.Port};Database={config.Database};User Id={config.Username};Password={config.Password};AllowPublicKeyRetrieval={config.AllowPublicKeyRetrieval};",
         DatabaseType.SQLite => $"Data Source={config.Server};",
         DatabaseType.Oracle => $"User Id={config.Username};Password={config.Password};Data Source={config.Server};",
