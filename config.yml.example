@@ -16,9 +16,9 @@ http:
   proxy: ""
   proxy_username: ""
   proxy_password: ""
-# choose excel, sql
-import_mode: "sql"
-import_file: "import/import.xlsx"
+# choose csv, excel, sql, ldap
+import_mode: "csv"
+import_file: "import/import.csv"
 import_sql:
   # SqlServer, MySql, SQLite, Oracle
   database_type: SqlServer
@@ -28,7 +28,7 @@ import_sql:
   username: "your_username"
   password: "your_password"
   allow_public_key_retrieval: true # Only applicable for MySQL
-  staff_query: "import/_export_staff.sql"
+  staff_query: "import/import.sql"
 import_ldap:
   server: "yourserver.local"
   path: "ou=YourOrgUnit,dc=test,dc=local"
