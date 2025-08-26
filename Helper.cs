@@ -1,11 +1,8 @@
-using System;
 using System.Data;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Reflection;
 using Newtonsoft.Json;
+using CsvHelper;
+using CsvHelper.Configuration;
 
 namespace SamedisStaffSync
 {
@@ -47,6 +44,29 @@ namespace SamedisStaffSync
       File.AppendAllText(Path.Combine("log", LogFile), logContent + "\n");
     }
 
+    public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true)
+    {
+      var dt = new DataTable();
+
+      var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+      {
+        HasHeaderRecord = hasHeader,
+        Delimiter = ";",
+        Encoding = System.Text.Encoding.UTF8,
+        DetectColumnCountChanges = true,
+        BadDataFound = null // ignore bad data gracefully
+      };
+
+      using (var reader = new StreamReader(filePath, System.Text.Encoding.UTF8))
+      using (var csv = new CsvReader(reader, config))
+      {
+        using var dr = new CsvDataReader(csv);
+        dt.Load(dr);
+      }
+
+      return dt;
+    }
+
     public static bool CheckColumnsExist(DataTable dataTable, string[] requiredColumns)
     {
       foreach (var columnName in requiredColumns)
@@ -55,6 +75,13 @@ namespace SamedisStaffSync
           return false;
       }
       return true;
+    }
+
+    public static string[] GetAvailableColumns(DataTable dataTable, string[] importColumns)
+    {
+      return importColumns
+          .Where(columnName => dataTable.Columns.Contains(columnName))
+          .ToArray();
     }
 
     public bool TryParseDate(string stringDate, out DateTime result)

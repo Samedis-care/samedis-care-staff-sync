@@ -62,12 +62,23 @@ internal class Program
     helper.CanDo(samedisClient, staffResource);
 
     DataSet result = new();
+    var importFile = config.ImportFile;
 
     switch (config.ImportMode)
     {
+      case "csv":
+        if (!File.Exists(importFile))
+        {
+          helper.Message($"The file {importFile} does not exist. Stopping Import.", 1, "ERROR");
+          return;
+        }
+
+        result = new DataSet();
+        var table = Helper.ReadCsvWithCsvHelper(importFile, hasHeader: true);
+        result.Tables.Add(table);
+        break;
+
       case "excel":
-        // import file exists?
-        var importFile = config.ImportFile;
         if (!File.Exists(importFile))
         {
           helper.Message($"The file {importFile} does not exists. Stopping Import.", 1, "ERROR");
@@ -108,8 +119,10 @@ internal class Program
     }
 
     // column definition and check
-    string[] importColumns = { "Nachname", "Vorname", "Personalnummer", "Eintrittsdatum", "Austrittsdatum", "E-Mail", "Titel", "Bemerkungen", "Handynummer" }; //,"Id"};
-    if (!Helper.CheckColumnsExist(result.Tables[0], importColumns))
+    string[] importColumns = { "Vorname", "Nachname", "Mitarbeiternr.", "Beitritt am", "Austritt am", "E-Mail", "Titel", "Bemerkungen", "Handynummer", "Id"};
+    string[] importPresentColumns = Helper.GetAvailableColumns(result.Tables[0], importColumns);
+    string[] importMandatoryColumns = { "Vorname", "Nachname", "Mitarbeiternr.", "Beitritt am", "Austritt am" };
+    if (!Helper.CheckColumnsExist(result.Tables[0], importMandatoryColumns))
       helper.MessageAndExit("Invalid Column mapping, stopping import.");
 
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
@@ -123,7 +136,7 @@ internal class Program
       foreach (DataRow row in table.Rows)
       {
         //validate employee no
-        var tmpEmpl = row["Personalnummer"].ToString();
+        var tmpEmpl = row["Mitarbeiternr."].ToString();
         if (string.IsNullOrEmpty(tmpEmpl))
         {
           helper.Message($"SKIP: Missing EmployeeNo for \"{row["Nachname"]}\".");
@@ -131,43 +144,51 @@ internal class Program
         }
 
         //validate date fields
-        var tmpJoin = row["Eintrittsdatum"].ToString();
+        var tmpJoin = row["Beitritt am"].ToString();
         if (helper.TryParseDate(tmpJoin, out DateTime parsedJoin))
           tmpJoin = parsedJoin.ToString("dd.MM.yyyy");
         else
         {
-          helper.Message($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Eintrittsdatum"]}");
+          helper.Message($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Beitritt am"]}");
           continue;
         }
-        var tmpLeft = row["Austrittsdatum"].ToString();
+        var tmpLeft = row["Austritt am"].ToString();
         if (tmpLeft?.ToString().Length > 0)
         {
           if (helper.TryParseDate(tmpLeft, out DateTime parsedLeft))
             tmpLeft = parsedLeft.ToString("dd.MM.yyyy");
           else
           {
-            helper.Message($"SKIP: Invalid left date for \"{row["Nachname"]}\": {row["Austrittsdatum"]}");
+            helper.Message($"SKIP: Invalid left date for \"{row["Nachname"]}\": {row["Austritt am"]}");
             continue;
           }
           if (Convert.ToDateTime(tmpLeft) < Convert.ToDateTime(tmpJoin))
           {
-            helper.Message($"SKIP: Left date {row["Austrittsdatum"]} is before join date {row["Eintrittsdatum"]} for \"{row["Nachname"]}\".");
+            helper.Message($"SKIP: Left date {row["Austritt am"]} is before join date {row["Beitritt am"]} for \"{row["Nachname"]}\".");
             continue;
           }
         }
 
-        var attributes = new Staffs.Attributes
-        {
-          Title = row["Titel"]?.ToString()?.Trim(),
-          LastName = row["Nachname"]?.ToString()?.Trim(),
-          FirstName = row["Vorname"]?.ToString()?.Trim(),
-          Email = row["E-Mail"]?.ToString()?.Trim(),
-          MobileNumber = row["Handynummer"]?.ToString()?.Trim(),
-          Left = tmpLeft,
-          Joined = tmpJoin,
-          EmployeeNo = tmpEmpl,
-          Notes = row["Bemerkungen"]?.ToString()?.Trim()
-        };
+        var attributes = new Staffs.Attributes();
+
+        attributes.LastName = row["Nachname"]?.ToString()?.Trim();
+        attributes.FirstName = row["Vorname"]?.ToString()?.Trim();
+        attributes.EmployeeNo = tmpEmpl;
+        attributes.Left = tmpLeft;
+        attributes.Joined = tmpJoin;
+
+        // only set property if column exists
+        if (row.Table.Columns.Contains("Titel"))
+          attributes.Title = row["Titel"]?.ToString()?.Trim();
+
+        if (row.Table.Columns.Contains("E-Mail"))
+          attributes.Email = row["E-Mail"]?.ToString()?.Trim();
+
+        if (row.Table.Columns.Contains("Handynummer"))
+          attributes.MobileNumber = row["Handynummer"]?.ToString()?.Trim();
+
+        if (row.Table.Columns.Contains("Bemerkungen"))
+          attributes.Notes = row["Bemerkungen"]?.ToString()?.Trim();
 
         // check for Id, if exists, include
         if (Helper.CheckColumnsExist(result.Tables[0], new string[] { "Id" }))
@@ -194,7 +215,7 @@ internal class Program
         var requestResource = staffResource;
         requestResource += attributes.Id != null
                         ? idfilter.Replace("_ID_", attributes.Id, StringComparison.OrdinalIgnoreCase)
-                        : filter.Replace("_EMPLOYEENO_", row["Personalnummer"].ToString(), StringComparison.OrdinalIgnoreCase);
+                        : filter.Replace("_EMPLOYEENO_", row["Mitarbeiternr."].ToString(), StringComparison.OrdinalIgnoreCase);
 
         var client = samedisClient.Get(requestResource);
         var record = JsonConvert.DeserializeObject<Staffs.Root>(client);
@@ -204,13 +225,13 @@ internal class Program
         if (totalRecords > 0)
         {
           var recordId = record.Data[0].Attributes.Id;
-          helper.Message($"Staff EmployeeNo {row["Personalnummer"]} exists with record {recordId}", 2);
+          helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} exists with record {recordId}", 2);
           client = samedisClient.Put(staffResource, recordId, staffBody);
           helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
         }
         else
         {
-          helper.Message($"Staff EmployeeNo {row["Personalnummer"]} does not exists", 2);
+          helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} does not exists", 2);
           client = samedisClient.Post(staffResource, staffBody);
           helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
         }

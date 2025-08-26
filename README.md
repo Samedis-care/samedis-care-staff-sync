@@ -23,19 +23,19 @@ To access Samedis.care you need internet access. If this requires a proxy server
 
 ## Import mode
 
-You can choose Ldap (Active Directory), Excel or a SQL server as source.
+You can choose Ldap (Active Directory), , CSV, Excel or a SQL server as source.
 
 ```
 import_mode: "sql"
 ```
 
-Enter `ldap`, `excel` or `sql` as mode. Regarding your chosen mode you need to adjust the configuration file in the excel or sql section.
+Enter `ldap`, `csv`, `excel` or `sql` as mode. Regarding your chosen mode you need to adjust the configuration file in the excel or sql section.
 
-## Excel Import file
+## CSV / Excel Import file
 
-The Excel format matches exactly the excel file Samedis.care creates on an export. The file `import/import.xlsx` contains one example.
+The CSV or Excel format headers is similar to the Excel template you can download from Samedis.care import form. The file `import/import.xlsx` (or `import.csv`) contains one example.
 
-> You may export and add the column `Id` if your want to export, modify and import your staff lists inside Samedis.care
+> Note: In the rare case that you want to change the personnel number, you have to export all employees from Samedis.care as Excel with the Samedis.care id. You can then make an import with the Excel column `Id`, which uses this column as an identifier for inserting or updating. The personnel number is then overwritten.
 
 ## Sql server import
 
