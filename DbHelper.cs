@@ -30,12 +30,12 @@ namespace SamedisStaffSync
         DatabaseType.Oracle => Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance,
         _ => throw new NotSupportedException("Unsupported database type"),
       };
-      using (DbConnection connection = factory.CreateConnection())
+      using (DbConnection connection = factory.CreateConnection() ?? throw new InvalidOperationException("Failed to create a database connection."))
       {
         connection.ConnectionString = connectionString;
         connection.Open();
 
-        using DbCommand command = factory.CreateCommand();
+        using DbCommand command = factory.CreateCommand() ?? throw new InvalidOperationException("Failed to create a database command.");
         command.Connection = connection;
         command.CommandText = query;
 

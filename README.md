@@ -29,13 +29,29 @@ You can choose Ldap (Active Directory), , CSV, Excel or a SQL server as source.
 import_mode: "sql"
 ```
 
-Enter `ldap`, `csv`, `excel` or `sql` as mode. Regarding your chosen mode you need to adjust the configuration file in the excel or sql section.
+Enter `ldap`, `sap`, `csv`, `excel` or `sql` as mode. Regarding your chosen mode you need to adjust the configuration file in the excel or sql section.
+
+## Test mode
+
+If you want to check which final data should be transmitted to Samedis.care via the API, you can set `activate: true`.
+Staff API calls will then write the data to a CSV file `test_output.csv`, which you can check for content.
+If the data is correct, you can switch off test mode again (set value to `false`) and run the process again.
 
 ## CSV / Excel Import file
 
 The CSV or Excel format headers is similar to the Excel template you can download from Samedis.care import form. The file `import/import.xlsx` (or `import.csv`) contains one example.
 
 > Note: In the rare case that you want to change the personnel number, you have to export all employees from Samedis.care as Excel with the Samedis.care id. You can then make an import with the Excel column `Id`, which uses this column as an identifier for inserting or updating. The personnel number is then overwritten.
+
+## SAP CSV Import file
+
+This mode implemented a SAP HR CSV Export that contains the following header:
+
+```
+Vorname,Nachname,Mitarbeiternr.,Titel,Beitritt am,Austritt am,irrEintritt,Status,Abteilung,Abteilungstext,Kostenstelle,Dienstart,Dienstart Text,Position
+```
+
+As the records of this export might contains a employee several times (join, leave, switch departments, ...) data records are evaluated and a final import data record is generated for an employee.
 
 ## Sql server import
 

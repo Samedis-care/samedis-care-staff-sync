@@ -11,12 +11,14 @@ logging:
   level: 1
   # 0: none 1: console 2: logfile 3: console & logfile
   mode: 2
+testing:
+  active: false
 http:
   valid_certificate: true
   proxy: ""
   proxy_username: ""
   proxy_password: ""
-# choose csv, excel, sql, ldap
+# choose sap, csv, excel, sql, ldap
 import_mode: "csv"
 import_file: "import/import.csv"
 import_sql:

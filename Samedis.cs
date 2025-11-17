@@ -1,7 +1,7 @@
 using System.Net;
-using RestSharp;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RestSharp;
 
 namespace SamedisStaffSync
 {
@@ -29,17 +29,6 @@ namespace SamedisStaffSync
       {
         options.RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true;
       }
-
-      if (!string.IsNullOrEmpty(proxySettings.Proxy))
-      {
-        var proxy = new WebProxy(proxySettings.Proxy);
-        if (!string.IsNullOrEmpty(proxySettings.ProxyUsername))
-        {
-          proxy.Credentials = new NetworkCredential(proxySettings.ProxyUsername, proxySettings.ProxyPassword);
-        }
-        options.Proxy = proxy;
-      }
-
       using var client = new RestClient(options);
       var request = new RestRequest("api/v1/samedis.care/oauth/token", Method.Post)
         .AddHeader("accept", "application/json")
@@ -52,14 +41,17 @@ namespace SamedisStaffSync
       Status = response.StatusCode;
       StatusCode = (int)Status;
 
-      if (response.Content != null)
+      if (!string.IsNullOrEmpty(response.Content))
       {
         var root = JsonConvert.DeserializeObject<JObject>(response.Content);
-        var meta = root["meta"];
-        var data = root["data"];
-        BearerToken = meta["token"]?.ToString();
-        RefreshToken = meta["refresh_token"]?.ToString();
-        User = data["attributes"]["email"]?.ToString();
+        if (root != null)
+        {
+          var meta = root["meta"];
+          var data = root["data"];
+          BearerToken = meta?["token"]?.ToString() ?? string.Empty;
+          RefreshToken = meta?["refresh_token"]?.ToString() ?? string.Empty;
+          User = data?["attributes"]?["email"]?.ToString() ?? string.Empty;
+        }
       }
     }
   }
@@ -72,30 +64,32 @@ namespace SamedisStaffSync
     private readonly string _token;
     private readonly RestClientOptions _options;
     private readonly WebProxy? _proxy;
+    private readonly HttpSettings _proxySettings;
 
     public RequestData(string baseUrl, string token, HttpSettings proxySettings)
     {
       _baseUrl = baseUrl;
       _token = token;
+      _proxySettings = proxySettings;
       _options = new RestClientOptions(_baseUrl);
 
-      if (!proxySettings.ValidateCertificate)
+      if (!_proxySettings.ValidateCertificate)
       {
         _options.RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true;
       }
 
-      if (!string.IsNullOrEmpty(proxySettings.Proxy))
+      if (!string.IsNullOrEmpty(_proxySettings.Proxy))
       {
-        _proxy = new WebProxy(proxySettings.Proxy);
-        if (!string.IsNullOrEmpty(proxySettings.ProxyUsername))
+        _proxy = new WebProxy(_proxySettings.Proxy);
+        if (!string.IsNullOrEmpty(_proxySettings.ProxyUsername))
         {
-          _proxy.Credentials = new NetworkCredential(proxySettings.ProxyUsername, proxySettings.ProxyPassword);
+          _proxy.Credentials = new NetworkCredential(_proxySettings.ProxyUsername, _proxySettings.ProxyPassword);
         }
         _options.Proxy = _proxy;
       }
     }
 
-    public string Get(string resource)
+    public string? Get(string resource)
     {
       using var client = new RestClient(_options);
       var request = new RestRequest(resource, Method.Get)
@@ -111,7 +105,7 @@ namespace SamedisStaffSync
       return response.Content ?? string.Empty;
     }
 
-    public string Post(string resource, string content)
+    public string? Post(string resource, string content)
     {
       using var client = new RestClient(_options);
       var request = new RestRequest(resource, Method.Post)
@@ -128,7 +122,26 @@ namespace SamedisStaffSync
       return response.Content ?? string.Empty;
     }
 
-    public string Put(string resource, string id, string content)
+    public string? PostFileUload(string resource, string filePath, string name, bool primary)
+    {
+      using var client = new RestClient(_options);
+      var request = new RestRequest(resource, Method.Post)
+          .AddHeader("accept", "application/json")
+          .AddHeader("Content-Type", "multipart/form-data")
+          .AddHeader("Authorization", $"Bearer {_token}")
+          .AddParameter("data[name]", name)
+          .AddParameter("data[primary]", primary.ToString().ToLower())
+          .AddFile("data[image]", filePath);
+
+      var response = client.ExecutePost(request);
+      HandleRetry(response, request, client.ExecutePost);
+
+      Status = response.StatusCode;
+      StatusCode = (int)Status;
+      return response.Content ?? string.Empty;
+    }
+
+    public string? Put(string resource, string id, string content)
     {
       using var client = new RestClient(_options);
       var request = new RestRequest(resource + "/" + id, Method.Put)
@@ -157,6 +170,51 @@ namespace SamedisStaffSync
             Thread.Sleep(retryAfterSeconds * 1000);
             response = execute(request);
           }
+        }
+      }
+    }
+
+    public async Task DownloadAsync(string url, string outputPath)
+    {
+      var handler = new HttpClientHandler();
+
+      if (_proxySettings != null)
+      {
+        if (!string.IsNullOrEmpty(_proxySettings.Proxy))
+        {
+          var proxy = new WebProxy
+          {
+            Address = new Uri(_proxySettings.Proxy),
+            BypassProxyOnLocal = false,
+            UseDefaultCredentials = false
+          };
+
+          if (!string.IsNullOrEmpty(_proxySettings.ProxyUsername))
+          {
+            proxy.Credentials = new NetworkCredential(
+                _proxySettings.ProxyUsername,
+                _proxySettings.ProxyPassword
+            );
+          }
+
+          handler.Proxy = proxy;
+          handler.UseProxy = true;
+        }
+
+        if (!_proxySettings.ValidateCertificate)
+        {
+          handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+        }
+      }
+
+      using (HttpClient client = new HttpClient(handler))
+      {
+        var response = await client.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        using (var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
+        {
+          await response.Content.CopyToAsync(fileStream);
         }
       }
     }

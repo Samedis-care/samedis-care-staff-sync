@@ -57,6 +57,12 @@ namespace SamedisStaffSync
 
       [JsonProperty("title")]
       public string? Title { get; set; }
+
+      [JsonProperty("department_ids")]
+      public List<string>? DepartmentIds { get; set; }
+
+      [JsonProperty("position_ids")]
+      public List<string>? PositionIds { get; set; }
     }
 
     public class Data
@@ -116,6 +122,7 @@ namespace SamedisStaffSync
     public class Root
     {
       [JsonProperty("data")]
+      [JsonConverter(typeof(Helper.SingleOrArrayConverter<Data>))]
       public List<Data>? Data { get; set; }
 
       [JsonProperty("meta")]

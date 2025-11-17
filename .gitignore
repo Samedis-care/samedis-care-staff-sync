@@ -399,3 +399,5 @@ FodyWeavers.xsd
 
 config.yml
 lastrun.txt
+test_output.csv
+import/test_daten.csv

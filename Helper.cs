@@ -3,6 +3,8 @@ using System.Globalization;
 using Newtonsoft.Json;
 using CsvHelper;
 using CsvHelper.Configuration;
+using Newtonsoft.Json.Linq;
+using System.Reflection;
 
 namespace SamedisStaffSync
 {
@@ -22,6 +24,7 @@ namespace SamedisStaffSync
     /// </summary>
     public int LogMode = 3;
     public string LogFile = "debug.log";
+    private static readonly string CsvDelimiter = ";";
 
     public void Message(string message, int logLevel = 1, string logType = "INFO")
     {
@@ -44,14 +47,14 @@ namespace SamedisStaffSync
       File.AppendAllText(Path.Combine("log", LogFile), logContent + "\n");
     }
 
-    public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true)
+    public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true, string delimeter = ";")
     {
       var dt = new DataTable();
 
       var config = new CsvConfiguration(CultureInfo.InvariantCulture)
       {
         HasHeaderRecord = hasHeader,
-        Delimiter = ";",
+        Delimiter = delimeter,
         Encoding = System.Text.Encoding.UTF8,
         DetectColumnCountChanges = true,
         BadDataFound = null // ignore bad data gracefully
@@ -84,7 +87,7 @@ namespace SamedisStaffSync
           .ToArray();
     }
 
-    public bool TryParseDate(string stringDate, out DateTime result)
+    public static bool TryParseDate(string stringDate, out DateTime result)
     {
       // Try to parse AD GeneralizedTime format (e.g., 20240531193352.0Z)
       if (DateTime.TryParseExact(stringDate, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out result))
@@ -100,8 +103,11 @@ namespace SamedisStaffSync
       var check = client.Get(requestResource);
       if (client.StatusCode >= 400)
       {
-        var record = JsonConvert.DeserializeObject<Staffs.Root>(check);
-        MessageAndExit($"Sync stopped. {client.StatusCode} {record.Meta.Msg.Message}");
+        Staffs.Root? record = null;
+        if (!string.IsNullOrEmpty(check))
+          record = JsonConvert.DeserializeObject<Staffs.Root>(check);
+        var errorMsg = record?.Meta?.Msg?.Message ?? "Unknown error";
+        MessageAndExit($"Sync stopped. {client.StatusCode} {errorMsg}");
       }
     }
 
@@ -112,6 +118,101 @@ namespace SamedisStaffSync
       return null; // Unreachable Code, just for compiler
     }
 
+    private static readonly string[] StaffCsvColumns = typeof(Staffs.Attributes)
+      .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+      .OrderBy(property => property.MetadataToken)
+      .Select(property =>
+      {
+        var jsonProperty = property.GetCustomAttribute<JsonPropertyAttribute>();
+        return jsonProperty?.PropertyName ?? property.Name;
+      })
+      .Where(name => !string.Equals(name, "id", StringComparison.OrdinalIgnoreCase))
+      .ToArray();
+
+    public void AppendJsonAsCsv(string filePath, string json)
+    {
+      if (string.IsNullOrWhiteSpace(json))
+        return;
+
+      try
+      {
+        var root = JObject.Parse(json);
+        if (root["data"] is not JObject dataObject)
+        {
+          return;
+        }
+
+        if (StaffCsvColumns.Length == 0)
+        {
+          return;
+        }
+
+        var needsHeader = !File.Exists(filePath) || new FileInfo(filePath).Length == 0;
+        var delimiter = Helper.CsvDelimiter;
+
+        if (needsHeader)
+        {
+          var headerLine = string.Join(delimiter, StaffCsvColumns.Select(EscapeCsvValue));
+          File.AppendAllText(filePath, headerLine + Environment.NewLine);
+        }
+
+        var values = StaffCsvColumns
+          .Select(column => dataObject.TryGetValue(column, out var token) ? TokenToString(token) : string.Empty)
+          .Select(EscapeCsvValue);
+
+        var dataLine = string.Join(delimiter, values);
+        File.AppendAllText(filePath, dataLine + Environment.NewLine);
+      }
+      catch (Exception)
+      {
+        File.AppendAllText(filePath, json + Environment.NewLine);
+      }
+    }
+
+    private static string TokenToString(JToken token)
+    {
+      return token.Type switch
+      {
+        JTokenType.Array => string.Join("|", token.Select(TokenToString)),
+        JTokenType.Object => token.ToString(Formatting.None),
+        JTokenType.Null or JTokenType.Undefined => string.Empty,
+        JTokenType.Date => token.Value<DateTime>().ToString("o", CultureInfo.InvariantCulture),
+        _ => token.ToString()
+      };
+    }
+
+    private static string EscapeCsvValue(string value)
+    {
+      if (string.IsNullOrEmpty(value))
+        return string.Empty;
+
+      var needsQuotes = value.Contains('"') || value.Contains(CsvDelimiter) || value.Contains('\r') || value.Contains('\n');
+      var sanitized = value.Replace("\"", "\"\"");
+      return needsQuotes ? $"\"{sanitized}\"" : sanitized;
+    }
+
+    /// <summary>
+    /// Ensures JSON can be parsed whether "data" is a single object or array.
+    /// </summary>
+    public class SingleOrArrayConverter<T> : JsonConverter
+    {
+      public override bool CanConvert(Type objectType) => objectType == typeof(List<T>);
+
+      public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+      {
+        var token = JToken.Load(reader);
+        if (token.Type == JTokenType.Array)
+          return token.ToObject<List<T>>(serializer) ?? [];
+
+        var obj = token.ToObject<T>(serializer);
+        return obj != null ? new List<T> { obj } : [];
+      }
+
+      public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+      {
+        serializer.Serialize(writer, value);
+      }
+    }
   }
 
   public enum DatabaseType

@@ -11,7 +11,7 @@ namespace SamedisStaffSync
   {
     public static DataSet FillDirectory(string ldapServer, bool Ssl, string ldapPath, string userName, string password, string jsonMapping, string filter, Helper helper, DateTime lastRun)
     {
-      var mapping = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonMapping);
+      var mapping = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonMapping) ?? throw new ArgumentException("JSON mapping could not be deserialized or is null.", nameof(jsonMapping));
       DataSet dataSet = new();
       DataTable dataTable = new DataTable();
 
@@ -56,9 +56,10 @@ namespace SamedisStaffSync
           // Iterate over results and add rows to DataTable
           foreach (SearchResultEntry entry in searchResponse.Entries)
           {
-            if (entry.Attributes["whenChanged"]?.Count > 0)
+            var whenChangedAttr = entry.Attributes["whenChanged"];
+            if (whenChangedAttr != null && whenChangedAttr.Count > 0)
             {
-              string whenChangedString = entry.Attributes["whenChanged"][0].ToString();
+              string whenChangedString = whenChangedAttr[0]?.ToString() ?? string.Empty;
               if (DateTime.TryParseExact(whenChangedString, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime whenChanged))
               {
                 if (whenChanged <= lastRun)
