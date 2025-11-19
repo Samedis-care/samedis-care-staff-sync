@@ -216,6 +216,11 @@ internal class Program
             helper.Message($"SKIP: Left date {row["Austritt am"]} is before join date {row["Beitritt am"]} for \"{row["Nachname"]}\".");
             continue;
           }
+          if (Convert.ToDateTime(tmpLeft) > DateTime.Now.AddYears(10))
+          {
+            helper.Message($"SKIP: Left date {row["Austritt am"]}, please leave this field blank instead of using dates far in the future for \"{row["Nachname"]}\".");
+            continue;
+          }
         }
 
         var attributes = new Staffs.Attributes
