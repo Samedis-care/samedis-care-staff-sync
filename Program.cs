@@ -60,7 +60,7 @@ internal class Program
       ValidateCertificate = config.Http.ValidCertificate,
     };
 
-    var samedisAuth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, httpSettings);
+    var samedisAuth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, httpSettings, helper);
     helper.Message($"Credential checkup Status: {samedisAuth.StatusCode} {samedisAuth.Status} User: {samedisAuth.User}", 1);
     var bearerToken = samedisAuth.BearerToken;
 
