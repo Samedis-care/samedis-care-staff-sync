@@ -70,7 +70,7 @@ internal class Program
       helper.MessageAndExit("Samedis.Uri is not configured. Stopping Import.");
 
     //define resource
-    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings);
+    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings, helper.LogLevel, testMode);
     var staffResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/staffs";
 
     //check permissions
@@ -127,14 +127,17 @@ internal class Program
           }
         }
         break;
+
       case "sql":
         string connectionString = DbHelper.GetConnectionString(config.ImportSql);
         string sqlQuery = File.ReadAllText(config.ImportSql.StaffQuery);
         result = DbHelper.ExecuteQuery(config.ImportSql.DatabaseType, connectionString, sqlQuery);
         break;
+
       case "ldap":
         result = LdapHelper.FillDirectory(config.ImportLdap.Server, config.ImportLdap.Ssl, config.ImportLdap.Path, config.ImportLdap.Username, config.ImportLdap.Password, config.ImportLdap.Mapping, config.ImportLdap.Filter, helper, lastRun);
         break;
+
       case "sap":
         if (!File.Exists(importFile))
         {
@@ -144,27 +147,58 @@ internal class Program
         var sap = SapImporter.Import(importFile, helper);
         result = sap.PersonnelDataSet;
 
-        helper.Message($"Unique Positions: {sap.UniquePositions.Count}", 2);
-        helper.Message($"Unique Departments: {sap.UniqueDepartments.Count}", 2);
         helper.Message($"Unique Dienstarten: {sap.UniqueDienstarten.Count}", 2);
-
-        var positionsResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/positions";
-        var departmentsResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/departments";
-
-        foreach (var posTitle in sap.UniquePositions)
-        {
-          if (string.IsNullOrWhiteSpace(posTitle)) continue;
-          var pid = Positions.FindOrCreatePosition(samedisClient, positionsResource, posTitle);
-          if (!string.IsNullOrEmpty(pid)) positionIdsByTitle[posTitle] = pid!;
-        }
-
-        foreach (var dep in sap.UniqueDepartments.Values)
-        {
-          if (string.IsNullOrWhiteSpace(dep.Abteilungstext)) continue;
-          var did = Departments.FindOrCreateDepartment(samedisClient, departmentsResource, dep.Abteilungstext, dep.Abteilung, dep.Kostenstelle);
-          if (!string.IsNullOrEmpty(did)) departmentIdsByTitle[dep.Abteilung] = did!;
-        }
         break;
+    }
+
+    var orgData = OrgDataHelper.CollectUniqueOrgData(result);
+    helper.Message($"Unique Positions: {orgData.Positions.Count}", 2);
+    helper.Message($"Unique Departments: {orgData.Departments.Count}", 2);
+
+    if (orgData.Positions.Count > 0 || orgData.Departments.Count > 0)
+    {
+      var positionsResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/positions";
+      var departmentsResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/departments";
+
+      foreach (var posTitle in orgData.Positions)
+      {
+        if (string.IsNullOrWhiteSpace(posTitle)) continue;
+        var pid = config.Options.CreatePositions
+          ? Positions.FindOrCreatePosition(samedisClient, positionsResource, posTitle)
+          : Positions.FindPositionId(samedisClient, positionsResource, posTitle);
+        if (!string.IsNullOrEmpty(pid)) positionIdsByTitle[posTitle] = pid!;
+      }
+
+      foreach (var dep in orgData.Departments.Values)
+      {
+        if (string.IsNullOrWhiteSpace(dep.Title)) continue;
+        var did = config.Options.CreateDepartments
+          ? Departments.FindOrCreateDepartment(samedisClient, departmentsResource, dep.Title, dep.Code, dep.CostCenter)
+          : Departments.FindDepartmentId(samedisClient, departmentsResource, dep.Title);
+        if (!string.IsNullOrEmpty(did)) departmentIdsByTitle[dep.Key] = did!;
+      }
+    }
+
+    if (testMode)
+    {
+      var posRows = orgData.Positions
+        .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+        .Select(p => new[]
+        {
+          p,
+          positionIdsByTitle.TryGetValue(p, out var id) ? id : string.Empty
+        });
+      Helper.WriteCsv("test_positions.csv", ["Positionen", "PositionId"], posRows);
+
+      var depRows = orgData.Departments.Values
+        .OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase)
+        .Select(d => new[]
+        {
+          d.Key,
+          d.Title,
+          departmentIdsByTitle.TryGetValue(d.Key, out var id) ? id : string.Empty
+        });
+      Helper.WriteCsv("test_departments.csv", ["Abteilungen", "Abteilungstext", "DepartmentId"], depRows);
     }
 
     // column definition and check

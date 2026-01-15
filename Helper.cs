@@ -169,6 +169,22 @@ namespace SamedisStaffSync
       }
     }
 
+    public static void WriteCsv(string filePath, string[] headers, IEnumerable<string[]> rows)
+    {
+      var delimiter = Helper.CsvDelimiter;
+      var lines = new List<string>
+      {
+        string.Join(delimiter, headers.Select(EscapeCsvValue))
+      };
+
+      foreach (var row in rows)
+      {
+        lines.Add(string.Join(delimiter, row.Select(EscapeCsvValue)));
+      }
+
+      File.WriteAllText(filePath, string.Join(Environment.NewLine, lines));
+    }
+
     private static string TokenToString(JToken token)
     {
       return token.Type switch
@@ -212,6 +228,84 @@ namespace SamedisStaffSync
       {
         serializer.Serialize(writer, value);
       }
+    }
+  }
+
+  public class DepartmentInfo
+  {
+    public string Key { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string? CostCenter { get; set; }
+  }
+
+  public class UniqueOrgData
+  {
+    public List<string> Positions { get; set; } = new List<string>();
+    public Dictionary<string, DepartmentInfo> Departments { get; set; } = new Dictionary<string, DepartmentInfo>(StringComparer.OrdinalIgnoreCase);
+  }
+
+  public static class OrgDataHelper
+  {
+    public static UniqueOrgData CollectUniqueOrgData(DataSet dataSet)
+    {
+      var positions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      var departments = new Dictionary<string, DepartmentInfo>(StringComparer.OrdinalIgnoreCase);
+
+      foreach (DataTable table in dataSet.Tables)
+      {
+        var hasPositions = table.Columns.Contains("Positionen");
+        var hasDepartments = table.Columns.Contains("Abteilungen");
+        var hasDeptText = table.Columns.Contains("Abteilungstext");
+        var hasCostCenter = table.Columns.Contains("Kostenstelle");
+
+        if (!hasPositions && !hasDepartments) continue;
+
+        foreach (DataRow row in table.Rows)
+        {
+          if (hasPositions)
+          {
+            var posTitle = row["Positionen"]?.ToString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(posTitle))
+              positions.Add(posTitle);
+          }
+
+          if (hasDepartments)
+          {
+            var deptKey = row["Abteilungen"]?.ToString()?.Trim();
+            if (string.IsNullOrWhiteSpace(deptKey)) continue;
+
+            var deptTitle = hasDeptText ? row["Abteilungstext"]?.ToString()?.Trim() : null;
+            var costCenter = hasCostCenter ? row["Kostenstelle"]?.ToString()?.Trim() : null;
+
+            if (!departments.TryGetValue(deptKey, out var existing))
+            {
+              departments[deptKey] = new DepartmentInfo
+              {
+                Key = deptKey,
+                Title = !string.IsNullOrWhiteSpace(deptTitle) ? deptTitle! : deptKey,
+                Code = hasDeptText ? deptKey : null,
+                CostCenter = !string.IsNullOrWhiteSpace(costCenter) ? costCenter : null
+              };
+            }
+            else
+            {
+              if (!string.IsNullOrWhiteSpace(deptTitle))
+                existing.Title = deptTitle!;
+              if (hasDeptText && string.IsNullOrWhiteSpace(existing.Code))
+                existing.Code = deptKey;
+              if (!string.IsNullOrWhiteSpace(costCenter))
+                existing.CostCenter = costCenter;
+            }
+          }
+        }
+      }
+
+      return new UniqueOrgData
+      {
+        Positions = positions.OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList(),
+        Departments = departments
+      };
     }
   }
 

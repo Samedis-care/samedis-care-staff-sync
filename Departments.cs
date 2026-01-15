@@ -6,6 +6,28 @@ namespace SamedisStaffSync
   public class Departments
   {
 
+    public static string? FindDepartmentId(RequestData client, string departmentsResource, string title)
+    {
+      var gf = $"?gridfilter={{\"title\":{{\"filterType\":\"text\",\"type\":\"equals\",\"filter\":\"{title.Replace("\"", "\\\"")}\"}}}}&page=1&limit=1";
+      var getResp = client.Get(departmentsResource + gf);
+
+      if (string.IsNullOrEmpty(getResp))
+        return null;
+
+      try
+      {
+        var jo = JObject.Parse(getResp);
+        var dataTok = jo["data"];
+        if (dataTok is JObject obj)
+          return obj["id"]?.ToString() ?? obj["attributes"]?["id"]?.ToString();
+        if (dataTok is JArray arr && arr.Count > 0)
+          return arr[0]["id"]?.ToString() ?? arr[0]["attributes"]?["id"]?.ToString();
+      }
+      catch { }
+
+      return null;
+    }
+
     public static string? FindOrCreateDepartment(RequestData client, string departmentsResource, string title, string? code, string? costCenter)
     {
       // lookup

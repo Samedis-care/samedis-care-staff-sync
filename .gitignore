@@ -401,3 +401,7 @@ config.yml
 lastrun.txt
 test_output.csv
 import/test_daten.csv
+test_departments.csv
+.gitignore
+debug_get_requests.csv
+test_positions.csv

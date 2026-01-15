@@ -6,6 +6,21 @@ namespace SamedisStaffSync
   public class Positions
   {
 
+    public static string? FindPositionId(RequestData client, string positionsResource, string title)
+    {
+      var gf = $"?gridfilter={{\"title\":{{\"filterType\":\"text\",\"type\":\"equals\",\"filter\":\"{title.Replace("\"", "\\\"")}\"}}}}&page=1&limit=1";
+      var getResp = client.Get(positionsResource + gf);
+      Root? posRoot = null;
+      if (!string.IsNullOrEmpty(getResp))
+      {
+        posRoot = JsonConvert.DeserializeObject<Root>(getResp);
+      }
+      var total = posRoot?.Meta?.Total ?? 0;
+      if (total > 0)
+        return posRoot!.Data![0].Attributes!.Id;
+      return null;
+    }
+
     public static string? FindOrCreatePosition(RequestData client, string positionsResource, string title)
     {
       // Build gridfilter for title equals

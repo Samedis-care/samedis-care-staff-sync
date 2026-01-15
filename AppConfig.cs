@@ -15,6 +15,7 @@ namespace SamedisStaffSync
     public ImportSqlConfig ImportSql { get; set; } = new ImportSqlConfig();
     public LdapConfig ImportLdap { get; set; } = new LdapConfig();
     public TestingConfig Testing { get; set; } = new TestingConfig();
+    public OptionsConfig Options { get; set; } = new OptionsConfig();
 
     public static AppConfig LoadFromYaml(string filePath)
     {
@@ -80,5 +81,11 @@ namespace SamedisStaffSync
   public class TestingConfig
   {
     public bool Active { get; set; }
+  }
+
+  public class OptionsConfig
+  {
+    public bool CreatePositions { get; set; }
+    public bool CreateDepartments { get; set; }
   }
 }

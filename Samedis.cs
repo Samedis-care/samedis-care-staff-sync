@@ -182,8 +182,7 @@ namespace SamedisStaffSync
 
         helper.Message($"Auth request completed in {sw.ElapsedMilliseconds} ms", 2, "DEBUG");
 
-        // Debug-only: detailed response dump
-        helper.Message(DumpResponse(response));
+        helper.Message(DumpResponse(response), 2, "DEBUG");
 
         Status = response.StatusCode;
         StatusCode = (int)Status;
@@ -222,17 +221,23 @@ namespace SamedisStaffSync
   {
     public int StatusCode = 0;
     public HttpStatusCode Status;
+    public bool Debug { get; set; }
+    public int LogLevel { get; set; }
+    public bool TestMode { get; set; }
     private readonly string _baseUrl;
     private readonly string _token;
     private readonly RestClientOptions _options;
     private readonly WebProxy? _proxy;
     private readonly HttpSettings _proxySettings;
 
-    public RequestData(string baseUrl, string token, HttpSettings proxySettings)
+    public RequestData(string baseUrl, string token, HttpSettings proxySettings, int logLevel = 0, bool testMode = false)
     {
       _baseUrl = baseUrl;
       _token = token;
       _proxySettings = proxySettings;
+      LogLevel = logLevel;
+      Debug = logLevel >= 2;
+      TestMode = testMode;
       _options = new RestClientOptions(_baseUrl);
 
       if (!_proxySettings.ValidateCertificate)
@@ -264,6 +269,8 @@ namespace SamedisStaffSync
 
       Status = response.StatusCode;
       StatusCode = (int)Status;
+      if (Debug && TestMode)
+        WriteDebugGetCsv(resource, response);
       return response.Content ?? string.Empty;
     }
 
@@ -334,6 +341,44 @@ namespace SamedisStaffSync
           }
         }
       }
+    }
+
+    private static readonly object DebugCsvLock = new object();
+    private const string DebugGetCsvFile = "debug_get_requests.csv";
+
+    private static void WriteDebugGetCsv(string resource, RestResponse response)
+    {
+      var headers = new[] { "Timestamp", "Method", "Resource", "StatusCode", "ResponseBody" };
+      var body = response.Content ?? string.Empty;
+      var preview = body.Length > 2000 ? body.Substring(0, 2000) : body;
+      var row = new[]
+      {
+        DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+        "GET",
+        resource ?? string.Empty,
+        ((int)response.StatusCode).ToString(),
+        preview.Replace("\r", " ").Replace("\n", " ")
+      };
+
+      lock (DebugCsvLock)
+      {
+        var needsHeader = !File.Exists(DebugGetCsvFile) || new FileInfo(DebugGetCsvFile).Length == 0;
+        using var sw = new StreamWriter(DebugGetCsvFile, append: true, Encoding.UTF8);
+        if (needsHeader)
+        {
+          sw.WriteLine(string.Join(";", headers.Select(EscapeCsv)));
+        }
+        sw.WriteLine(string.Join(";", row.Select(EscapeCsv)));
+      }
+    }
+
+    private static string EscapeCsv(string value)
+    {
+      if (string.IsNullOrEmpty(value))
+        return string.Empty;
+      var needsQuotes = value.Contains('"') || value.Contains(';') || value.Contains('\r') || value.Contains('\n');
+      var sanitized = value.Replace("\"", "\"\"");
+      return needsQuotes ? $"\"{sanitized}\"" : sanitized;
     }
 
     public async Task DownloadAsync(string url, string outputPath)

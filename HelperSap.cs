@@ -28,18 +28,9 @@ namespace SamedisStaffSync
     public string DienstartText { get; set; } = string.Empty;     // descriptive text
   }
 
-  public class SapDepartmentInfo
-  {
-    public string Abteilung { get; set; } = string.Empty;
-    public string Abteilungstext { get; set; } = string.Empty;
-    public string Kostenstelle { get; set; } = string.Empty;
-  }
-
   public class SapImportResult
   {
     public DataSet PersonnelDataSet { get; set; } = new DataSet();
-    public List<string> UniquePositions { get; set; } = new List<string>();
-    public Dictionary<string, SapDepartmentInfo> UniqueDepartments { get; set; } = new Dictionary<string, SapDepartmentInfo>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> UniqueDienstarten { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
   }
 
@@ -97,34 +88,6 @@ namespace SamedisStaffSync
         };
         if (!string.IsNullOrWhiteSpace(rec.Personalnummer))
           records.Add(rec);
-      }
-
-      // Build unique collections
-      var uniquePositions = records
-        .Select(r => r.Position)
-        .Where(s => !string.IsNullOrWhiteSpace(s))
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-        .ToList();
-
-      var uniqueDepartments = new Dictionary<string, SapDepartmentInfo>(StringComparer.OrdinalIgnoreCase);
-      foreach (var r in records)
-      {
-        if (string.IsNullOrWhiteSpace(r.Abteilung)) continue;
-        if (!uniqueDepartments.ContainsKey(r.Abteilung))
-        {
-          uniqueDepartments[r.Abteilung] = new SapDepartmentInfo
-          {
-            Abteilung = r.Abteilung,
-            Abteilungstext = r.Abteilungstext,
-            Kostenstelle = r.Kostenstelle
-          };
-        }
-        else
-        {
-          if ( !string.IsNullOrEmpty(r.Kostenstelle) && uniqueDepartments[r.Abteilung].Kostenstelle != r.Kostenstelle )
-            uniqueDepartments[r.Abteilung].Kostenstelle = r.Kostenstelle; // last one wins
-        }
       }
 
       var uniqueDienstarten = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -210,6 +173,8 @@ namespace SamedisStaffSync
       table.Columns.Add("Austritt am", typeof(string)); // dd.MM.yyyy or empty
       table.Columns.Add("Positionen", typeof(string));
       table.Columns.Add("Abteilungen", typeof(string));
+      table.Columns.Add("Abteilungstext", typeof(string));
+      table.Columns.Add("Kostenstelle", typeof(string));
 
       foreach (var x in consolidated)
       {
@@ -228,20 +193,20 @@ namespace SamedisStaffSync
           joinStr,
           leftStr,
           Prefer(f.Position),
-          Prefer(f.Abteilung)
+          Prefer(f.Abteilung),
+          Prefer(f.Abteilungstext),
+          Prefer(f.Kostenstelle)
         );
       }
 
       var ds = new DataSet();
       ds.Tables.Add(table);
 
-      helper?.Message($"SAP Import: raw rows: {records.Count}, unique employees: {consolidated.Count}, unique positions: {uniquePositions.Count}, departments: {uniqueDepartments.Count}, dienst-arten: {uniqueDienstarten.Count}", 1);
+      helper?.Message($"SAP Import: raw rows: {records.Count}, unique employees: {consolidated.Count}, dienst-arten: {uniqueDienstarten.Count}", 1);
 
       return new SapImportResult
       {
         PersonnelDataSet = ds,
-        UniquePositions = uniquePositions,
-        UniqueDepartments = uniqueDepartments,
         UniqueDienstarten = uniqueDienstarten
       };
     }

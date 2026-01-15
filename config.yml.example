@@ -13,6 +13,9 @@ logging:
   mode: 2
 testing:
   active: false
+options:
+  create_positions: false
+  create_departments: false
 http:
   valid_certificate: true
   proxy: ""
