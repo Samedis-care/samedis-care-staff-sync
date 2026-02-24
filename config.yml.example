@@ -41,4 +41,4 @@ import_ldap:
   username: "your_username"
   password: "your_password"
   filter: "(&(objectCategory=person)(objectClass=user))"
-  mapping: "{ \"Nachname\": \"sn\", \"Vorname\": \"givenName\", \"Personalnummer\": \"employeeID\", \"Eintrittsdatum\": \"whenCreated\", \"Austrittsdatum\": \"extensionAttribute10\", \"E-Mail\": \"mail\", \"Titel\": \"title\", \"Bemerkungen\": \"description\", \"Handynummer\": \"mobile\" }"
+  mapping: "{ \"Nachname\": \"sn\", \"Vorname\": \"givenName\", \"Mitarbeiternr.\": \"employeeID\", \"Beitritt am\": \"whenCreated\", \"Austritt am\": \"extensionAttribute10\", \"E-Mail\": \"mail\", \"Titel\": \"title\", \"Bemerkungen\": \"description\", \"Handynummer\": \"mobile\" }"

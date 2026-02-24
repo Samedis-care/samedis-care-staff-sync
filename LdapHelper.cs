@@ -9,16 +9,48 @@ namespace SamedisStaffSync
 {
   class LdapHelper
   {
+    private static readonly string[] DefaultOutputColumns =
+    [
+      "Vorname",
+      "Nachname",
+      "Mitarbeiternr.",
+      "Beitritt am",
+      "Austritt am",
+      "E-Mail",
+      "Titel",
+      "Bemerkungen",
+      "Handynummer",
+      "Positionen",
+      "Abteilungen",
+      "Abteilungstext",
+      "Kostenstelle",
+      "Id"
+    ];
+
     public static DataSet FillDirectory(string ldapServer, bool Ssl, string ldapPath, string userName, string password, string jsonMapping, string filter, Helper helper, DateTime lastRun)
     {
       var mapping = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonMapping) ?? throw new ArgumentException("JSON mapping could not be deserialized or is null.", nameof(jsonMapping));
+      var configuredMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+      foreach (var column in mapping)
+      {
+        configuredMapping[column.Key.Trim()] = column.Value;
+      }
+
       DataSet dataSet = new();
       DataTable dataTable = new DataTable();
 
-      // Add columns to the DataTable based on the JSON mapping
-      foreach (var column in mapping.Keys)
+      // Keep output schema aligned with Program.cs import processing.
+      foreach (var column in DefaultOutputColumns)
       {
         dataTable.Columns.Add(column);
+      }
+
+      // Keep any custom mapped columns as passthrough values.
+      foreach (var column in configuredMapping.Keys)
+      {
+        if (!dataTable.Columns.Contains(column))
+          dataTable.Columns.Add(column);
       }
 
       try
@@ -44,60 +76,90 @@ namespace SamedisStaffSync
           // Connect to the LDAP server
           ldapConnection.Bind();
 
-          var propertiesToLoad = new List<string>(mapping.Values);
+          var propertiesToLoad = new List<string>(configuredMapping.Values);
           propertiesToLoad.Add("userAccountControl");
           propertiesToLoad.Add("whenChanged");
 
           var searchRequest = new SearchRequest(ldapPath, filter, SearchScope.Subtree, propertiesToLoad.ToArray());
+          const int LdapPageSize = 500;
+          var pageRequestControl = new PageResultRequestControl(LdapPageSize);
+          searchRequest.Controls.Add(pageRequestControl);
+          int pageNumber = 0;
+          int totalReturnedEntries = 0;
 
-          // Send the search request
-          var searchResponse = (SearchResponse)ldapConnection.SendRequest(searchRequest);
+          helper.Message($"LDAP search started. Path='{ldapPath}', Filter='{filter}', Scope='{SearchScope.Subtree}', PageSize={LdapPageSize}", 2);
 
-          // Iterate over results and add rows to DataTable
-          foreach (SearchResultEntry entry in searchResponse.Entries)
+          while (true)
           {
-            var whenChangedAttr = entry.Attributes["whenChanged"];
-            if (whenChangedAttr != null && whenChangedAttr.Count > 0)
+            pageNumber++;
+            var searchResponse = (SearchResponse)ldapConnection.SendRequest(searchRequest);
+            int pageReturnedEntries = searchResponse.Entries.Count;
+            totalReturnedEntries += pageReturnedEntries;
+            helper.Message($"LDAP page {pageNumber}: returned {pageReturnedEntries} entries.", 2);
+
+            // Iterate over results and add rows to DataTable.
+            foreach (SearchResultEntry entry in searchResponse.Entries)
             {
-              string whenChangedString = whenChangedAttr[0]?.ToString() ?? string.Empty;
-              if (DateTime.TryParseExact(whenChangedString, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime whenChanged))
+              var whenChangedAttr = entry.Attributes["whenChanged"];
+              if (whenChangedAttr != null && whenChangedAttr.Count > 0)
               {
-                if (whenChanged <= lastRun)
+                string whenChangedString = whenChangedAttr[0]?.ToString() ?? string.Empty;
+                if (DateTime.TryParseExact(whenChangedString, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime whenChanged))
                 {
-                  helper.Message($"SKIP: record not changed", 2);
-                  continue; // Skip records that have not been changed since the last run
+                  if (whenChanged <= lastRun)
+                  {
+                    helper.Message($"SKIP: record not changed", 2);
+                    continue; // Skip records that have not been changed since the last run.
+                  }
+                }
+                else
+                {
+                  helper.Message($"Failed to parse whenChanged value: {whenChangedString}");
+                  continue; // Skip records with invalid whenChanged value.
                 }
               }
-              else
+
+              DataRow row = dataTable.NewRow();
+              foreach (var column in configuredMapping)
               {
-                helper.Message($"Failed to parse whenChanged value: {whenChangedString}");
-                continue; // Skip records with invalid whenChanged value
+                var attribute = entry.Attributes[column.Value];
+                row[column.Key] = attribute?.Count > 0 ? attribute[0].ToString() : DBNull.Value;
+              }
+
+              // Check if the user is deactivated.
+              if (entry.Attributes["userAccountControl"]?.Count > 0)
+              {
+                var userAccountControlString = entry.Attributes["userAccountControl"][0].ToString();
+                if (int.TryParse(userAccountControlString, out int userAccountControl))
+                {
+                  const int ADS_UF_ACCOUNTDISABLE = 0x0002;
+                  if ((userAccountControl & ADS_UF_ACCOUNTDISABLE) == ADS_UF_ACCOUNTDISABLE)
+                    row["Austritt am"] = DateTime.Now.ToString("dd.MM.yyyy");
+                }
+                else
+                  helper.Message($"Failed to parse userAccountControl value: {userAccountControlString}");
+              }
+
+              dataTable.Rows.Add(row);
+            }
+
+            PageResultResponseControl? pageResponseControl = null;
+            foreach (DirectoryControl control in searchResponse.Controls)
+            {
+              if (control is PageResultResponseControl responseControl)
+              {
+                pageResponseControl = responseControl;
+                break;
               }
             }
 
-            DataRow row = dataTable.NewRow();
-            foreach (var column in mapping)
-            {
-              var attribute = entry.Attributes[column.Value];
-              row[column.Key] = attribute?.Count > 0 ? attribute[0].ToString() : DBNull.Value;
-            }
+            if (pageResponseControl == null || pageResponseControl.Cookie == null || pageResponseControl.Cookie.Length == 0)
+              break;
 
-            // Check if the user is deactivated
-            if (entry.Attributes["userAccountControl"]?.Count > 0)
-            {
-              var userAccountControlString = entry.Attributes["userAccountControl"][0].ToString();
-              if (int.TryParse(userAccountControlString, out int userAccountControl))
-              {
-                const int ADS_UF_ACCOUNTDISABLE = 0x0002;
-                if ((userAccountControl & ADS_UF_ACCOUNTDISABLE) == ADS_UF_ACCOUNTDISABLE)
-                  row["Austrittsdatum"] = DateTime.Now.ToString("dd.MM.yyyy");
-              }
-              else
-                helper.Message($"Failed to parse userAccountControl value: {userAccountControlString}");
-            }
-
-            dataTable.Rows.Add(row);
+            pageRequestControl.Cookie = pageResponseControl.Cookie;
           }
+
+          helper.Message($"LDAP search completed. Path='{ldapPath}', Filter='{filter}', ReturnedEntries={totalReturnedEntries}, ImportedRows={dataTable.Rows.Count}");
         }
       }
       catch (LdapException ex)
