@@ -87,5 +87,6 @@ namespace SamedisStaffSync
   {
     public bool CreatePositions { get; set; }
     public bool CreateDepartments { get; set; }
+    public bool LoginAllowed { get; set; }
   }
 }

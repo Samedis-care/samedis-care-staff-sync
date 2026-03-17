@@ -279,6 +279,9 @@ internal class Program
         if (row.Table.Columns.Contains("Bemerkungen"))
           attributes.Notes = row["Bemerkungen"]?.ToString()?.Trim();
 
+        if (config.Options.LoginAllowed)
+          attributes.LoginAllowed = true;
+
         // check for Id, if exists, include
         if (Helper.CheckColumnsExist(result.Tables[0], ["Id"]))
           attributes.Id = row["Id"].ToString();
