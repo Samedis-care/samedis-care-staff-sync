@@ -73,6 +73,23 @@ internal class Program
     var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings, helper.LogLevel, testMode);
     var staffResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/staffs";
 
+    // log tenant info
+    var tenantResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}";
+    var tenantResp = samedisClient.Get(tenantResource);
+    var tenantName = "<unknown>";
+    if (!string.IsNullOrEmpty(tenantResp))
+    {
+      try
+      {
+        var tenantJson = JObject.Parse(tenantResp);
+        tenantName = tenantJson["data"]?["attributes"]?["title"]?.ToString()
+                  ?? tenantJson["data"]?["attributes"]?["name"]?.ToString()
+                  ?? "<unknown>";
+      }
+      catch { /* leave as unknown */ }
+    }
+    helper.Message($"Tenant: {tenantName} (ID: {config.Samedis.TenantId})", 1);
+
     //check permissions
     helper.CanDo(samedisClient, staffResource);
 
