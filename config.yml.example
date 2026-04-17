@@ -16,6 +16,7 @@ testing:
 options:
   create_positions: false
   create_departments: false
+  login_allowed: false # if true, sends login_allowed: true in the staff payload (PUT/POST)
 http:
   valid_certificate: true
   proxy: ""
