@@ -26,6 +26,8 @@ internal class Program
 
     helper.LogLevel = config.Logging.Level;
     helper.LogMode = config.Logging.Mode;
+    if (!string.IsNullOrEmpty(config.CsvDelimiter))
+      Helper.CsvDelimiter = config.CsvDelimiter;
 
     helper.Message("Sync started.", 1);
 
@@ -228,6 +230,8 @@ internal class Program
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
     var idfilter = "?gridfilter={\"id\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_ID_\"}}";
 
+    int createdCount = 0, updatedCount = 0, unchangedCount = 0;
+
     foreach (DataTable table in result.Tables)
     {
 
@@ -352,16 +356,29 @@ internal class Program
           // put or post
           if (totalRecords > 0)
           {
-            var recordId = record?.Data?[0].Attributes?.Id ?? "";
+            var remoteAttrs = record?.Data?[0].Attributes;
+            var recordId = remoteAttrs?.Id ?? "";
             helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} exists with record {recordId}", 2);
-            if (!string.IsNullOrEmpty(recordId)) client = samedisClient.Put(staffResource, recordId, staffBody);
+            if (Helper.StaffPayloadMatchesRemote(dataObject, remoteAttrs, out var diffReason))
+            {
+              unchangedCount++;
+              helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} unchanged, skipping update.", 2);
+            }
+            else if (!string.IsNullOrEmpty(recordId))
+            {
+              helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} changed ({diffReason}), updating.", 2);
+              client = samedisClient.Put(staffResource, recordId, staffBody);
+              updatedCount++;
+              helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
+            }
           }
           else
           {
             helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} does not exists", 2);
             client = samedisClient.Post(staffResource, staffBody);
+            createdCount++;
+            helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
           }
-          helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
         }
         else
         {
@@ -369,6 +386,6 @@ internal class Program
         }
       }
     }
-    helper.Message("Sync finised.", 1);
+    helper.Message($"Sync finished. Created: {createdCount}, Updated: {updatedCount}, Unchanged: {unchangedCount}.", 1);
   }
 }

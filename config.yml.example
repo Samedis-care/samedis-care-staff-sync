@@ -25,6 +25,8 @@ http:
 # choose sap, csv, excel, sql, ldap
 import_mode: "csv"
 import_file: "import/import.csv"
+# delimiter used when reading/writing CSV files (csv and sap import modes, test output)
+csv_delimiter: ";"
 import_sql:
   # SqlServer, MySql, SQLite, Oracle
   database_type: SqlServer

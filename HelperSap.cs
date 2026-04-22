@@ -50,7 +50,7 @@ namespace SamedisStaffSync
       }
 
       // Read the CSV as DataTable using existing helper (keeps project consistency)
-      DataTable raw = Helper.ReadCsvWithCsvHelper(csvPath, hasHeader: true, delimeter: ",");
+      DataTable raw = Helper.ReadCsvWithCsvHelper(csvPath, hasHeader: true);
       var columnNames = raw.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToList();
 
       static string GetCell(DataRow row, params string[] names)

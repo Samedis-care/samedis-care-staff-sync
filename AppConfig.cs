@@ -12,6 +12,7 @@ namespace SamedisStaffSync
     public HttpConfig Http { get; set; } = new HttpConfig();
     public string ImportMode { get; set; } = "excel";
     public string ImportFile { get; set; } = "";
+    public string CsvDelimiter { get; set; } = ";";
     public ImportSqlConfig ImportSql { get; set; } = new ImportSqlConfig();
     public LdapConfig ImportLdap { get; set; } = new LdapConfig();
     public TestingConfig Testing { get; set; } = new TestingConfig();

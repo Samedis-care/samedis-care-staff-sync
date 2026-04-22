@@ -24,7 +24,7 @@ namespace SamedisStaffSync
     /// </summary>
     public int LogMode = 3;
     public string LogFile = "debug.log";
-    private static readonly string CsvDelimiter = ";";
+    public static string CsvDelimiter = ";";
 
     public void Message(string message, int logLevel = 1, string logType = "INFO")
     {
@@ -47,14 +47,14 @@ namespace SamedisStaffSync
       File.AppendAllText(Path.Combine("log", LogFile), logContent + "\n");
     }
 
-    public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true, string delimeter = ";")
+    public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true, string? delimeter = null)
     {
       var dt = new DataTable();
 
       var config = new CsvConfiguration(CultureInfo.InvariantCulture)
       {
         HasHeaderRecord = hasHeader,
-        Delimiter = delimeter,
+        Delimiter = delimeter ?? CsvDelimiter,
         Encoding = System.Text.Encoding.UTF8,
         DetectColumnCountChanges = true,
         BadDataFound = null // ignore bad data gracefully
@@ -95,6 +95,75 @@ namespace SamedisStaffSync
 
       // Try general DateTime parsing for other formats
       return DateTime.TryParse(stringDate, out result);
+    }
+
+    /// <summary>
+    /// Returns true when every field in the outgoing payload already matches the remote attributes.
+    /// Lists are compared as unordered sets (e.g. department_ids, position_ids). Date fields are
+    /// compared as parsed DateTime values so dd.MM.yyyy vs ISO formats round-trip cleanly.
+    /// Only fields present in the outgoing payload are checked — fields we do not set are ignored.
+    /// <paramref name="mismatchReason"/> is populated with the first differing field for logging.
+    /// </summary>
+    public static bool StaffPayloadMatchesRemote(JObject outgoing, Staffs.Attributes? remote, out string? mismatchReason)
+    {
+      mismatchReason = null;
+      if (remote == null) { mismatchReason = "remote record missing"; return false; }
+      var remoteJson = JObject.FromObject(remote);
+      var dateFields = new HashSet<string>(StringComparer.Ordinal) { "joined", "left" };
+
+      foreach (var prop in outgoing.Properties())
+      {
+        var remoteToken = remoteJson[prop.Name];
+        var outgoingToken = prop.Value;
+
+        if (dateFields.Contains(prop.Name))
+        {
+          var outStr = outgoingToken.Type == JTokenType.Null ? string.Empty : outgoingToken.ToString();
+          var remStr = remoteToken == null || remoteToken.Type == JTokenType.Null ? string.Empty : remoteToken.ToString();
+          if (string.IsNullOrEmpty(outStr) && string.IsNullOrEmpty(remStr)) continue;
+          if (TryParseStaffDate(outStr, out var outDate) && TryParseStaffDate(remStr, out var remDate))
+          {
+            if (outDate.Date != remDate.Date)
+            {
+              mismatchReason = $"{prop.Name}: '{outStr}' vs '{remStr}'";
+              return false;
+            }
+            continue;
+          }
+          if (!string.Equals(outStr, remStr, StringComparison.Ordinal))
+          {
+            mismatchReason = $"{prop.Name}: '{outStr}' vs '{remStr}'";
+            return false;
+          }
+          continue;
+        }
+
+        if (outgoingToken is JArray outArr)
+        {
+          var outList = outArr.Select(t => t.ToString()).OrderBy(s => s, StringComparer.Ordinal).ToList();
+          var remList = (remoteToken as JArray)?.Select(t => t.ToString()).OrderBy(s => s, StringComparer.Ordinal).ToList() ?? new List<string>();
+          if (!outList.SequenceEqual(remList))
+          {
+            mismatchReason = $"{prop.Name}: [{string.Join(",", outList)}] vs [{string.Join(",", remList)}]";
+            return false;
+          }
+        }
+        else if (!JToken.DeepEquals(outgoingToken, remoteToken ?? JValue.CreateNull()))
+        {
+          mismatchReason = $"{prop.Name}: '{outgoingToken}' vs '{remoteToken?.ToString() ?? "<missing>"}'";
+          return false;
+        }
+      }
+      return true;
+    }
+
+    private static bool TryParseStaffDate(string s, out DateTime date)
+    {
+      date = default;
+      if (string.IsNullOrWhiteSpace(s)) return false;
+      if (DateTime.TryParseExact(s, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out date)) return true;
+      if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out date)) return true;
+      return DateTime.TryParse(s, out date);
     }
 
     public void CanDo(RequestData client, string resource)
