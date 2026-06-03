@@ -228,7 +228,7 @@ internal class Program
       helper.MessageAndExit("Invalid Column mapping, stopping import.");
 
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
-    var idfilter = "?gridfilter={\"id\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_ID_\"}}";
+    var idfilter = "?gridfilter={\"id\": {\"filterType\": \"object_id\", \"type\": \"equals\", \"filter\": \"_ID_\"}}";
 
     int createdCount = 0, updatedCount = 0, unchangedCount = 0;
 
@@ -343,7 +343,7 @@ internal class Program
         {
           // check if exists
           var requestResource = staffResource;
-          requestResource += attributes.Id != null
+          requestResource += !string.IsNullOrEmpty(attributes.Id)
                           ? idfilter.Replace("_ID_", attributes.Id, StringComparison.OrdinalIgnoreCase)
                           : filter.Replace("_EMPLOYEENO_", row["Mitarbeiternr."].ToString(), StringComparison.OrdinalIgnoreCase);
 
