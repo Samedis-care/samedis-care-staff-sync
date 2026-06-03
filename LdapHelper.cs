@@ -9,6 +9,13 @@ namespace SamedisStaffSync
 {
   class LdapHelper
   {
+    /// <summary>
+    /// Internal marker column written by LdapHelper to signal whether the AD account
+    /// is currently enabled (true) or disabled (false). Read by Program.cs to decide
+    /// how to handle re-activations and re-deactivations against the remote staff record.
+    /// </summary>
+    public const string LdapActiveColumn = "_LdapActive";
+
     private static readonly string[] DefaultOutputColumns =
     [
       "Vorname",
@@ -24,7 +31,8 @@ namespace SamedisStaffSync
       "Abteilungen",
       "Abteilungstext",
       "Kostenstelle",
-      "Id"
+      "Id",
+      LdapActiveColumn
     ];
 
     public static DataSet FillDirectory(string ldapServer, bool Ssl, string ldapPath, string userName, string password, string jsonMapping, string filter, Helper helper, DateTime lastRun)
@@ -79,6 +87,10 @@ namespace SamedisStaffSync
           var propertiesToLoad = new List<string>(configuredMapping.Values);
           propertiesToLoad.Add("userAccountControl");
           propertiesToLoad.Add("whenChanged");
+          // whenCreated is used as a fallback for "Beitritt am" when the configured
+          // mapping returns no value (and is generally useful for reactivation logic).
+          if (!propertiesToLoad.Contains("whenCreated", StringComparer.OrdinalIgnoreCase))
+            propertiesToLoad.Add("whenCreated");
 
           var searchRequest = new SearchRequest(ldapPath, filter, SearchScope.Subtree, propertiesToLoad.ToArray());
           const int LdapPageSize = 500;
@@ -126,7 +138,29 @@ namespace SamedisStaffSync
                 row[column.Key] = attribute?.Count > 0 ? attribute[0].ToString() : DBNull.Value;
               }
 
-              // Check if the user is deactivated.
+              // Fallback for "Beitritt am": if the configured mapping did not yield a
+              // value, use the AD whenCreated timestamp so we never sync an empty join date.
+              if (dataTable.Columns.Contains("Beitritt am"))
+              {
+                var joinedValue = row["Beitritt am"]?.ToString();
+                if (string.IsNullOrWhiteSpace(joinedValue))
+                {
+                  var whenCreatedAttr = entry.Attributes["whenCreated"];
+                  if (whenCreatedAttr != null && whenCreatedAttr.Count > 0)
+                  {
+                    var whenCreatedString = whenCreatedAttr[0]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(whenCreatedString))
+                      row["Beitritt am"] = whenCreatedString;
+                  }
+                }
+              }
+
+              // Check if the user is deactivated and surface it via the marker column
+              // so Program.cs can apply reactivation / "do-not-override" logic against
+              // the remote record. We also keep the historical fallback of setting
+              // "Austritt am" to today, but ONLY when the mapped attribute did not
+              // already provide an explicit left date.
+              bool ldapAccountActive = true;
               if (entry.Attributes["userAccountControl"]?.Count > 0)
               {
                 var userAccountControlString = entry.Attributes["userAccountControl"][0].ToString();
@@ -134,11 +168,18 @@ namespace SamedisStaffSync
                 {
                   const int ADS_UF_ACCOUNTDISABLE = 0x0002;
                   if ((userAccountControl & ADS_UF_ACCOUNTDISABLE) == ADS_UF_ACCOUNTDISABLE)
-                    row["Austritt am"] = DateTime.Now.ToString("dd.MM.yyyy");
+                  {
+                    ldapAccountActive = false;
+                    var existingLeft = row["Austritt am"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(existingLeft))
+                      row["Austritt am"] = DateTime.Now.ToString("dd.MM.yyyy");
+                  }
                 }
                 else
                   helper.Message($"Failed to parse userAccountControl value: {userAccountControlString}");
               }
+
+              row[LdapActiveColumn] = ldapAccountActive ? "true" : "false";
 
               dataTable.Rows.Add(row);
             }

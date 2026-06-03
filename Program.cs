@@ -359,6 +359,45 @@ internal class Program
             var remoteAttrs = record?.Data?[0].Attributes;
             var recordId = remoteAttrs?.Id ?? "";
             helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} exists with record {recordId}", 2);
+
+            // LDAP reactivation / re-deactivation handling.
+            // Only applies when the row was produced by the LDAP importer (i.e. carries
+            // the _LdapActive marker). CSV/Excel/SQL/SAP imports retain their previous
+            // behaviour because the marker column is absent.
+            if (row.Table.Columns.Contains(LdapHelper.LdapActiveColumn))
+            {
+              var ldapActiveStr = row[LdapHelper.LdapActiveColumn]?.ToString();
+              if (!string.IsNullOrWhiteSpace(ldapActiveStr))
+              {
+                var ldapActive = string.Equals(ldapActiveStr, "true", StringComparison.OrdinalIgnoreCase);
+                var remoteHasLeft = !string.IsNullOrWhiteSpace(remoteAttrs?.Left);
+
+                if (ldapActive && remoteHasLeft)
+                {
+                  // Reactivation: AD account is enabled again but the remote staff
+                  // record still carries a left date. Explicitly clear the left
+                  // date and (re-)send the joined date from the LDAP mapping.
+                  dataObject["left"] = JValue.CreateNull();
+                  dataObject["joined"] = tmpJoin;
+                  helper.Message($"Reactivation detected for EmployeeNo {row["Mitarbeiternr."]}: clearing left, joined='{tmpJoin}'.", 1);
+                  staffObject = new JObject { ["data"] = dataObject };
+                  staffBody = JsonConvert.SerializeObject(staffObject, Formatting.Indented);
+                }
+                else if (!ldapActive && remoteHasLeft)
+                {
+                  // Already deactivated in a previous run — do NOT overwrite the
+                  // remote left date just because something else on the AD record
+                  // changed (whenChanged would otherwise drag the left date along).
+                  if (dataObject.Remove("left"))
+                  {
+                    helper.Message($"EmployeeNo {row["Mitarbeiternr."]} already deactivated; preserving remote left='{remoteAttrs?.Left}'.", 2);
+                    staffObject = new JObject { ["data"] = dataObject };
+                    staffBody = JsonConvert.SerializeObject(staffObject, Formatting.Indented);
+                  }
+                }
+              }
+            }
+
             if (Helper.StaffPayloadMatchesRemote(dataObject, remoteAttrs, out var diffReason))
             {
               unchangedCount++;
