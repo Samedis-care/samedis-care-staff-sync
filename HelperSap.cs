@@ -26,6 +26,11 @@ namespace SamedisStaffSync
     public string Position { get; set; } = string.Empty;          // position text or code
     public string Dienstart { get; set; } = string.Empty;         // e.g., Tagdienst, Nachtdienst, Rufbereitschaft
     public string DienstartText { get; set; } = string.Empty;     // descriptive text
+
+    // Original 0-based position in the CSV. Used as a tie-breaker so that, when
+    // multiple rows are equally valid (e.g. a name change with identical dates),
+    // the last row in the file wins — SAP HR exports the changed record last.
+    public int RowIndex { get; set; }
   }
 
   public class SapImportResult
@@ -66,10 +71,12 @@ namespace SamedisStaffSync
 
       // Map raw rows to typed records (tolerant to missing columns)
       var records = new List<SapCsvRecord>(raw.Rows.Count);
+      int rowIndex = 0;
       foreach (DataRow r in raw.Rows)
       {
         var rec = new SapCsvRecord
         {
+          RowIndex = rowIndex++,
           Personalnummer = GetCell(r, "Personalnummer", "Mitarbeiternr.", "EmployeeID"),
           Vorname = GetCell(r, "Vorname", "FirstName"),
           Nachname = GetCell(r, "Nachname", "LastName"),
@@ -124,11 +131,15 @@ namespace SamedisStaffSync
             .ToList();
           DateTime? lastLeft = lefts.Count > 0 ? lefts.Max() : (DateTime?)null;
 
-          // pick the most recent by Eintritt, then by name
+          // Pick the representative record: most recent by Eintritt, and for ties
+          // (e.g. a name change where all dates are identical) the last row in the
+          // CSV wins. SAP HR keeps every other field the same but appends the
+          // changed record at the end of the export, so the highest RowIndex holds
+          // the current name. RowIndex descending replaces the old alphabetical
+          // name tie-break, which arbitrarily picked the wrong (often pre-change) row.
           var representative = g
             .OrderByDescending(r => TryParseDate(r.Eintritt, out var d) ? d : DateTime.MinValue)
-            .ThenBy(r => r.Nachname)
-            .ThenBy(r => r.Vorname)
+            .ThenByDescending(r => r.RowIndex)
             .First();
 
           // department fallback

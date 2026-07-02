@@ -397,6 +397,23 @@ internal class Program
                 }
               }
             }
+            else
+            {
+              // Non-LDAP sources (csv/excel/sql/sap) carry no _LdapActive marker, so
+              // the source's left date field is authoritative. When the incoming left
+              // date is empty but the remote record still has one, that implies a
+              // (re-)entry — explicitly clear the remote left instead of dropping the
+              // field from the payload (an omitted field would leave the old value).
+              var remoteHasLeft = !string.IsNullOrWhiteSpace(remoteAttrs?.Left);
+              var incomingHasLeft = !string.IsNullOrWhiteSpace(tmpLeft);
+              if (!incomingHasLeft && remoteHasLeft)
+              {
+                dataObject["left"] = JValue.CreateNull();
+                helper.Message($"Empty left for EmployeeNo {row["Mitarbeiternr."]}: clearing remote left='{remoteAttrs?.Left}'.", 1);
+                staffObject = new JObject { ["data"] = dataObject };
+                staffBody = JsonConvert.SerializeObject(staffObject, Formatting.Indented);
+              }
+            }
 
             if (Helper.StaffPayloadMatchesRemote(dataObject, remoteAttrs, out var diffReason))
             {
