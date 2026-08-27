@@ -1,4 +1,5 @@
 using System.Data;
+using SamedisCare.Api;
 
 namespace SamedisStaffSync
 {

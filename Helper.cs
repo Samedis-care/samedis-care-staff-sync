@@ -5,6 +5,7 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using Newtonsoft.Json.Linq;
 using System.Reflection;
+using SamedisCare.Api;
 
 namespace SamedisStaffSync
 {

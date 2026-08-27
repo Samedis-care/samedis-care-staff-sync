@@ -54,6 +54,14 @@ namespace SamedisStaffSync
     public string Proxy { get; set; } = "";
     public string ProxyUsername { get; set; } = "";
     public string ProxyPassword { get; set; } = "";
+
+    /// <summary>
+    /// Hard timeout per HTTP request, in seconds. Before the migration to
+    /// SamedisCare.Api this tool set no timeout at all, so the default here is
+    /// deliberately generous — LDAP/SAP-driven runs can produce slow bulk calls.
+    /// Lower it only if the endpoint is known to respond quickly.
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 300;
   }
 
   public class ImportSqlConfig

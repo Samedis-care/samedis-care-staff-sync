@@ -2,6 +2,8 @@
 using ExcelDataReader;
 using System.Data;
 using Newtonsoft.Json.Linq;
+using SamedisCare.Api;
+using SamedisCare.Api.Routing;
 
 namespace SamedisStaffSync;
 
@@ -60,9 +62,17 @@ internal class Program
       ProxyUsername = config.Http.ProxyUsername,
       ProxyPassword = config.Http.ProxyPassword,
       ValidateCertificate = config.Http.ValidCertificate,
+      // Explicit: SamedisCare.Api defaults to 30s, while this tool previously set no
+      // timeout at all. Carried over from config so long LDAP/SAP runs do not start
+      // failing after the migration.
+      TimeoutSeconds = config.Http.TimeoutSeconds,
     };
 
-    var samedisAuth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, httpSettings, helper);
+    // The library logs through ISyncLog; this adapter keeps routing everything into the
+    // existing Helper.Message, so log level, log mode and log file behave as before.
+    var syncLog = new SyncLogAdapter(helper);
+
+    var samedisAuth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, httpSettings, syncLog);
     helper.Message($"Credential checkup Status: {samedisAuth.StatusCode} {samedisAuth.Status} User: {samedisAuth.User}", 1);
     var bearerToken = samedisAuth.BearerToken;
 
@@ -72,8 +82,13 @@ internal class Program
       helper.MessageAndExit("Samedis.Uri is not configured. Stopping Import.");
 
     //define resource
-    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings, helper.LogLevel, testMode);
-    var staffResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/staffs";
+    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings, syncLog, testMode);
+
+    // Resource paths come from ITenantScope instead of string interpolation. Swapping this
+    // one line for TenantScope.Enterprise(tenantId, clientId) is what an enterprise
+    // ("service world") mode would need — params and responses are identical.
+    var scope = TenantScope.Standard(config.Samedis.TenantId, config.Samedis.ApiVersion);
+    var staffResource = scope.Resource("staffs");
 
     // log tenant info
     var tenantResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}";
@@ -176,8 +191,8 @@ internal class Program
 
     if (orgData.Positions.Count > 0 || orgData.Departments.Count > 0)
     {
-      var positionsResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/positions";
-      var departmentsResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}/departments";
+      var positionsResource = scope.Resource("positions");
+      var departmentsResource = scope.Resource("departments");
 
       foreach (var posTitle in orgData.Positions)
       {
