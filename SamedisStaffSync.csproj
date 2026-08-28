@@ -34,7 +34,6 @@
     <!-- Newtonsoft.Json and RestSharp aligned with what SamedisCare.Api brings, so
          NuGet does not have to resolve two different versions. -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="Oracle.ManagedDataAccess" Version="21.13.0" />
     <PackageReference Include="RestSharp" Version="112.1.0" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.118" PrivateAssets="none" />

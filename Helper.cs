@@ -312,7 +312,6 @@ namespace SamedisStaffSync
     SqlServer,
     MySql,
     SQLite,
-    Oracle
   }
 
 }

@@ -14,7 +14,6 @@ namespace SamedisStaffSync
                                 : $"Data Source={config.Server};Initial Catalog={config.Database};User Id={config.Username};Password={config.Password};",
         DatabaseType.MySql => $"Server={config.Server};Port={config.Port};Database={config.Database};User Id={config.Username};Password={config.Password};AllowPublicKeyRetrieval={config.AllowPublicKeyRetrieval};",
         DatabaseType.SQLite => $"Data Source={config.Server};",
-        DatabaseType.Oracle => $"User Id={config.Username};Password={config.Password};Data Source={config.Server};",
         _ => throw new NotSupportedException("Unsupported database type"),
       };
     }
@@ -27,7 +26,6 @@ namespace SamedisStaffSync
         DatabaseType.SqlServer => System.Data.SqlClient.SqlClientFactory.Instance,
         DatabaseType.MySql => MySql.Data.MySqlClient.MySqlClientFactory.Instance,
         DatabaseType.SQLite => Microsoft.Data.Sqlite.SqliteFactory.Instance,
-        DatabaseType.Oracle => Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance,
         _ => throw new NotSupportedException("Unsupported database type"),
       };
       using (DbConnection connection = factory.CreateConnection() ?? throw new InvalidOperationException("Failed to create a database connection."))

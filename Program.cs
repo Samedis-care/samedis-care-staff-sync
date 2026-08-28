@@ -8,6 +8,7 @@ using SamedisCare.Api.Http;
 using SamedisCare.Api.Logging;
 using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Common;
+using SamedisCare.Api.V4.Common;
 
 namespace SamedisStaffSync;
 
@@ -93,22 +94,13 @@ internal class Program
     var scope = TenantScope.Standard(config.Samedis.TenantId, config.Samedis.ApiVersion);
     var staffResource = scope.Resource("staffs");
 
-    // log tenant info
-    var tenantResource = $"/api/{config.Samedis.ApiVersion}/tenants/{config.Samedis.TenantId}";
-    var tenantResp = samedisClient.Get(tenantResource);
-    var tenantName = "<unknown>";
-    if (!string.IsNullOrEmpty(tenantResp))
-    {
-      try
-      {
-        var tenantJson = JObject.Parse(tenantResp);
-        tenantName = tenantJson["data"]?["attributes"]?["title"]?.ToString()
-                  ?? tenantJson["data"]?["attributes"]?["name"]?.ToString()
-                  ?? "<unknown>";
-      }
-      catch { /* leave as unknown */ }
-    }
-    log.Info($"Tenant: {tenantName} (ID: {config.Samedis.TenantId})");
+    // The tenant record is NOT under the tenant scope - there is no
+    // GET /api/v4/tenants/{id} in the public API. It lives on the user surface at
+    // /api/{version}/user/tenants/{id}, which Tenant.GetSettings requests. That also
+    // reads `name` (the serializer has no `title`) and logs a warning when the request
+    // fails, instead of silently reporting an unknown tenant.
+    var tenantSettings = Tenant.GetSettings(samedisClient, config.Samedis.ApiVersion, config.Samedis.TenantId, log);
+    log.Info($"Tenant: {(string.IsNullOrEmpty(tenantSettings.Name) ? "<unknown>" : tenantSettings.Name)} (ID: {config.Samedis.TenantId})");
 
     //check permissions
     RequireAccess(log, samedisClient, staffResource);
