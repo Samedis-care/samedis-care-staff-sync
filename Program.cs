@@ -31,11 +31,13 @@ internal class Program
 
     // read config
     var ymlFilePath = "config.yml";
+    // ConfigStore throws FileNotFoundException for a missing file and YamlException for
+    // invalid YAML or an unknown key, so no null check is needed - it never returns null.
+    // The explicit File.Exists gives the operator a plainer message than the exception.
     if (!File.Exists(ymlFilePath))
       Abort(log, $"The file {ymlFilePath} does not exists. Stopping Import.");
 
     AppConfig config = ConfigStore.Load<AppConfig>(ymlFilePath, ignoreUnmatchedProperties: false);
-    if (config == null) Environment.Exit(1);
 
     // Now with the configured level and mode.
     log = new FileSyncLog(config.Logging.Level, (SamedisCare.Helper.Logging.LogMode)config.Logging.Mode, logFile);
@@ -58,11 +60,8 @@ internal class Program
     string filePath = "lastrun.txt";
     DateTime currentTimestamp = DateTime.Now;
     DateTime lastRun = ReadLastRun(filePath, currentTimestamp, log);
-    // Round-trip format, invariant. The previous code wrote currentTimestamp.ToString()
-    // and read it back with Convert.ToDateTime - both culture-dependent, so the same file
-    // parsed differently on a machine with another locale, and a day/month swap silently
-    // moved the sync window.
-    File.WriteAllText(filePath, currentTimestamp.ToString("O", CultureInfo.InvariantCulture));
+    // Written at the END of a successful run, not here. Advancing it up front meant a run
+    // that failed half way had already moved the window on and never retried it.
 
     // init authentication
     if (config.Auth.Uri.Length == 0 || config.Auth.ClientId.Length == 0 || config.Auth.ClientSecret.Length == 0)
@@ -471,6 +470,17 @@ internal class Program
       }
     }
     log.Info($"Sync finished. Created: {createdCount}, Updated: {updatedCount}, Unchanged: {unchangedCount}.");
+
+    // Only now, and only for a real run. Every path that gives up before this point -
+    // Abort, or a return on invalid config or a missing import file - leaves lastrun.txt
+    // untouched, so the next run picks the same window up again.
+    // Round-trip and invariant: the previous code used ToString()/Convert.ToDateTime, both
+    // culture-dependent, so between a day-first and a month-first locale a day/month swap
+    // silently moved the window.
+    if (testMode)
+      log.Warn($"TEST MODE - {filePath} not updated (stays at {lastRun:O}).");
+    else
+      File.WriteAllText(filePath, currentTimestamp.ToString("O", CultureInfo.InvariantCulture));
   }
 
   /// <summary>
