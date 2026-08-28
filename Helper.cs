@@ -1,14 +1,9 @@
 using System.Data;
 using System.Globalization;
 using Newtonsoft.Json;
-using CsvHelper;
-using CsvHelper.Configuration;
 using Newtonsoft.Json.Linq;
 using System.Reflection;
-using SamedisCare.Api.Http;
-using SamedisCare.Helper.Logging;
 using SamedisCare.Api.V4.Public;
-using SamedisCare.Api.Common;
 using SamedisCare.Helper;
 using SamedisCare.Helper.Text;
 
@@ -16,24 +11,9 @@ namespace SamedisStaffSync
 {
   public static class Helper
   {
-    public static string CsvDelimiter = ";";
-
-    // Logging lives in SamedisCare.Api.Logging.FileSyncLog. This class no longer
-    // carries a copy of it, and no longer needs to be instantiated at all.
-
-    // CSV reading, column checks and writing now come from SamedisCare.Helper.Text.Csv.
-    // Thin wrappers are kept so the many call sites in Program.cs stay unchanged.
-    public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true, string? delimeter = null)
-      => Csv.Read(filePath, hasHeader, delimeter ?? CsvDelimiter);
-
-    public static bool CheckColumnsExist(DataTable dataTable, string[] requiredColumns)
-      => Csv.HasColumns(dataTable, requiredColumns);
-
-    public static string[] GetAvailableColumns(DataTable dataTable, string[] importColumns)
-      => Csv.AvailableColumns(dataTable, importColumns);
-
-    public static bool TryParseLdapDate(string stringDate, out DateTime result)
-      => Dates.TryParseGeneralizedTime(stringDate, out result);
+    // CSV reading and writing, column checks, date parsing and logging all come from
+    // SamedisCare.Helper and are called directly at the call sites. What is left here is
+    // specific to this import.
 
     /// <summary>
     /// Returns true when every field in the outgoing payload already matches the remote attributes.
@@ -120,7 +100,7 @@ namespace SamedisStaffSync
       .Where(name => !string.Equals(name, "id", StringComparison.OrdinalIgnoreCase))
       .ToArray();
 
-    public static void AppendJsonAsCsv(string filePath, string json)
+    public static void AppendJsonAsCsv(string filePath, string json, string delimiter)
     {
       if (string.IsNullOrWhiteSpace(json))
         return;
@@ -139,7 +119,6 @@ namespace SamedisStaffSync
         }
 
         var needsHeader = !File.Exists(filePath) || new FileInfo(filePath).Length == 0;
-        var delimiter = Helper.CsvDelimiter;
 
         if (needsHeader)
         {
@@ -159,9 +138,6 @@ namespace SamedisStaffSync
         File.AppendAllText(filePath, json + Environment.NewLine);
       }
     }
-
-    public static void WriteCsv(string filePath, string[] headers, IEnumerable<string[]> rows)
-      => Csv.Write(filePath, headers, rows);
 
     private static string TokenToString(JToken token)
       => token.Type is JTokenType.Null or JTokenType.Undefined

@@ -11,6 +11,7 @@ using SamedisCare.Api.Common;
 using SamedisCare.Helper;
 using SamedisCare.Api.V4.Common;
 using SamedisCare.Helper.Data;
+using SamedisCare.Helper.Text;
 
 namespace SamedisStaffSync;
 
@@ -35,8 +36,8 @@ internal class Program
 
     // Now with the configured level and mode.
     log = new FileSyncLog(config.Logging.Level, (SamedisCare.Helper.Logging.LogMode)config.Logging.Mode, logFile);
-    if (!string.IsNullOrEmpty(config.CsvDelimiter))
-      Helper.CsvDelimiter = config.CsvDelimiter;
+    // Passed explicitly to the CSV calls instead of being parked in a mutable static.
+    var csvDelimiter = string.IsNullOrEmpty(config.CsvDelimiter) ? Csv.DefaultDelimiter : config.CsvDelimiter;
 
     log.Info("Sync started.");
 
@@ -124,7 +125,7 @@ internal class Program
         }
 
         result = new DataSet();
-        var table = Helper.ReadCsvWithCsvHelper(importFile, hasHeader: true);
+        var table = Csv.Read(importFile, hasHeader: true, csvDelimiter);
         result.Tables.Add(table);
         break;
 
@@ -175,7 +176,7 @@ internal class Program
           log.Error($"The file {importFile} does not exists. Stopping Import.");
           return;
         }
-        var sap = SapImporter.Import(importFile, log);
+        var sap = SapImporter.Import(importFile, log, csvDelimiter);
         result = sap.PersonnelDataSet;
 
         log.Debug($"Unique Dienstarten: {sap.UniqueDienstarten.Count}");
@@ -219,7 +220,7 @@ internal class Program
           p,
           positionIdsByTitle.TryGetValue(p, out var id) ? id : string.Empty
         });
-      Helper.WriteCsv("test_positions.csv", ["Positionen", "PositionId"], posRows);
+      Csv.Write("test_positions.csv", ["Positionen", "PositionId"], posRows, csvDelimiter);
 
       var depRows = orgData.Departments.Values
         .OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase)
@@ -229,14 +230,14 @@ internal class Program
           d.Title,
           departmentIdsByTitle.TryGetValue(d.Key, out var id) ? id : string.Empty
         });
-      Helper.WriteCsv("test_departments.csv", ["Abteilungen", "Abteilungstext", "DepartmentId"], depRows);
+      Csv.Write("test_departments.csv", ["Abteilungen", "Abteilungstext", "DepartmentId"], depRows, csvDelimiter);
     }
 
     // column definition and check
     string[] importColumns = ["Vorname", "Nachname", "Mitarbeiternr.", "Beitritt am", "Austritt am", "E-Mail", "Titel", "Bemerkungen", "Handynummer", "Positionen", "Abteilungen", "Id"];
-    string[] importPresentColumns = Helper.GetAvailableColumns(result.Tables[0], importColumns);
+    string[] importPresentColumns = Csv.AvailableColumns(result.Tables[0], importColumns);
     string[] importMandatoryColumns = ["Vorname", "Nachname", "Mitarbeiternr.", "Beitritt am", "Austritt am"];
-    if (!Helper.CheckColumnsExist(result.Tables[0], importMandatoryColumns))
+    if (!Csv.HasColumns(result.Tables[0], importMandatoryColumns))
       Abort(log, "Invalid Column mapping, stopping import.");
 
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
@@ -261,7 +262,7 @@ internal class Program
 
         //validate date fields
         var tmpJoin = row["Beitritt am"]?.ToString();
-        if (!string.IsNullOrEmpty(tmpJoin) && Helper.TryParseLdapDate(tmpJoin, out DateTime parsedJoin))
+        if (!string.IsNullOrEmpty(tmpJoin) && Dates.TryParseGeneralizedTime(tmpJoin, out DateTime parsedJoin))
           tmpJoin = parsedJoin.ToString("dd.MM.yyyy");
         else
         {
@@ -271,7 +272,7 @@ internal class Program
         var tmpLeft = row["Austritt am"].ToString();
         if (tmpLeft?.ToString().Length > 0)
         {
-          if (Helper.TryParseLdapDate(tmpLeft, out DateTime parsedLeft))
+          if (Dates.TryParseGeneralizedTime(tmpLeft, out DateTime parsedLeft))
             tmpLeft = parsedLeft.ToString("dd.MM.yyyy");
           else
           {
@@ -316,7 +317,7 @@ internal class Program
           attributes.LoginAllowed = true;
 
         // check for Id, if exists, include
-        if (Helper.CheckColumnsExist(result.Tables[0], ["Id"]))
+        if (Csv.HasColumns(result.Tables[0], ["Id"]))
           attributes.Id = row["Id"].ToString();
 
         var deptTitle = row.Table.Columns.Contains("Abteilungen") ? row["Abteilungen"]?.ToString() : null;
@@ -450,7 +451,7 @@ internal class Program
         }
         else
         {
-          Helper.AppendJsonAsCsv(testFile, staffBody);
+          Helper.AppendJsonAsCsv(testFile, staffBody, csvDelimiter);
         }
       }
     }

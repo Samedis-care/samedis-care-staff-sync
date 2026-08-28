@@ -3,6 +3,7 @@ using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Common;
 using SamedisCare.Helper;
 using SamedisCare.Helper.Logging;
+using SamedisCare.Helper.Text;
 
 namespace SamedisStaffSync
 {
@@ -51,7 +52,7 @@ namespace SamedisStaffSync
     /// Personalnummer, Vorname, Nachname, Titel, Email, Handynummer, Bemerkungen, Status, Eintritt, Austritt,
     /// Abteilung, Abteilungstext, Kostenstelle, Position, Dienstart, DienstartText
     /// </summary>
-    public static SapImportResult Import(string csvPath, ISyncLog log)
+    public static SapImportResult Import(string csvPath, ISyncLog log, string delimiter)
     {
       if (!File.Exists(csvPath))
       {
@@ -59,7 +60,7 @@ namespace SamedisStaffSync
       }
 
       // Read the CSV as DataTable using existing helper (keeps project consistency)
-      DataTable raw = Helper.ReadCsvWithCsvHelper(csvPath, hasHeader: true);
+      DataTable raw = Csv.Read(csvPath, hasHeader: true, delimiter);
       var columnNames = raw.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToList();
 
       static string GetCell(DataRow row, params string[] names)
