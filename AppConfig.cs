@@ -1,4 +1,5 @@
 using SamedisCare.Helper.Config;
+using SamedisCare.Helper.Data;
 
 namespace SamedisStaffSync
 {
@@ -66,15 +67,12 @@ namespace SamedisStaffSync
     public int TimeoutSeconds { get; set; } = 300;
   }
 
-  public class ImportSqlConfig
+  /// <summary>
+  /// Inherits the connection fields from SamedisCare.Helper, so config.yml keeps its
+  /// database_type/server/port/... keys and nothing has to be copied across.
+  /// </summary>
+  public class ImportSqlConfig : DbConnectionSettings
   {
-    public DatabaseType DatabaseType { get; set; }
-    public string Server { get; set; } = "";
-    public string Port { get; set; } = "";
-    public string Database { get; set; } = "";
-    public string Username { get; set; } = "";
-    public string Password { get; set; } = "";
-    public bool AllowPublicKeyRetrieval { get; set; }
     public string StaffQuery { get; set; } = "";
   }
 

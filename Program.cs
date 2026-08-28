@@ -10,6 +10,7 @@ using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Common;
 using SamedisCare.Helper;
 using SamedisCare.Api.V4.Common;
+using SamedisCare.Helper.Data;
 
 namespace SamedisStaffSync;
 
@@ -159,9 +160,9 @@ internal class Program
         break;
 
       case "sql":
-        string connectionString = DbHelper.GetConnectionString(config.ImportSql);
+        var db = new DbTarget(Drivers.For(config.ImportSql.DatabaseType), config.ImportSql);
         string sqlQuery = File.ReadAllText(config.ImportSql.StaffQuery);
-        result = DbHelper.ExecuteQuery(config.ImportSql.DatabaseType, connectionString, sqlQuery);
+        result = db.QueryAsDataSet(sqlQuery);
         break;
 
       case "ldap":

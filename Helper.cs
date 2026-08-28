@@ -241,11 +241,5 @@ namespace SamedisStaffSync
     }
   }
 
-  public enum DatabaseType
-  {
-    SqlServer,
-    MySql,
-    SQLite,
-  }
 
 }
