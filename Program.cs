@@ -14,6 +14,7 @@ using SamedisCare.Helper.Data;
 using SamedisCare.Helper.Text;
 using SamedisCare.Helper.Config;
 using SamedisCare.Api.Query;
+using System.Globalization;
 
 namespace SamedisStaffSync;
 
@@ -56,8 +57,12 @@ internal class Program
     // last run
     string filePath = "lastrun.txt";
     DateTime currentTimestamp = DateTime.Now;
-    DateTime lastRun = File.Exists(filePath) ? Convert.ToDateTime(File.ReadAllText(filePath)) : currentTimestamp;
-    File.WriteAllText(filePath, currentTimestamp.ToString());
+    DateTime lastRun = ReadLastRun(filePath, currentTimestamp, log);
+    // Round-trip format, invariant. The previous code wrote currentTimestamp.ToString()
+    // and read it back with Convert.ToDateTime - both culture-dependent, so the same file
+    // parsed differently on a machine with another locale, and a day/month swap silently
+    // moved the sync window.
+    File.WriteAllText(filePath, currentTimestamp.ToString("O", CultureInfo.InvariantCulture));
 
     // init authentication
     if (config.Auth.Uri.Length == 0 || config.Auth.ClientId.Length == 0 || config.Auth.ClientSecret.Length == 0)
@@ -466,6 +471,31 @@ internal class Program
       }
     }
     log.Info($"Sync finished. Created: {createdCount}, Updated: {updatedCount}, Unchanged: {unchangedCount}.");
+  }
+
+  /// <summary>
+  /// Reads lastrun.txt. Falls back to <paramref name="fallback"/> with a warning instead of
+  /// throwing, so a corrupt or empty file does not take the run down.
+  /// </summary>
+  /// <remarks>
+  /// The current-culture attempt is there for files written by the previous version, which
+  /// used <c>DateTime.ToString()</c>. New files are written round-trip and invariant.
+  /// </remarks>
+  private static DateTime ReadLastRun(string path, DateTime fallback, ISyncLog log)
+  {
+    if (!File.Exists(path)) return fallback;
+
+    var raw = File.ReadAllText(path).Trim();
+
+    if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var roundTrip))
+      return roundTrip;
+    if (Dates.TryParse(raw, out var parsed))
+      return parsed;
+    if (DateTime.TryParse(raw, CultureInfo.CurrentCulture, DateTimeStyles.None, out var legacy))
+      return legacy;
+
+    log.Warn($"Could not parse {path} ('{raw}'), treating this as a full run from {fallback:O}.");
+    return fallback;
   }
 
   // Terminating the run is the host's decision, so it lives here and not in the library
