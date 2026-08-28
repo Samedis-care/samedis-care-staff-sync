@@ -2,8 +2,12 @@
 using ExcelDataReader;
 using System.Data;
 using Newtonsoft.Json.Linq;
-using SamedisCare.Api;
 using SamedisCare.Api.Routing;
+using SamedisCare.Api.Auth;
+using SamedisCare.Api.Http;
+using SamedisCare.Api.Logging;
+using SamedisCare.Api.V4.Public;
+using SamedisCare.Api.Common;
 
 namespace SamedisStaffSync;
 
@@ -12,33 +16,33 @@ internal class Program
   static void Main(string[] args)
   {
 
-    // set log
-    var helper = new Helper
-    {
-      LogFile = "Logfile_" + DateTime.Now.ToShortDateString() + ".log",
-    };
+    // Bootstrap logger with the previous defaults (level 1, console + file), because the
+    // config that carries the real level and mode is only read below - and reading it can
+    // already fail and needs to log.
+    var logFile = Path.Combine("log", "Logfile_" + DateTime.Now.ToShortDateString() + ".log");
+    ISyncLog log = new FileSyncLog(1, SamedisCare.Api.Logging.LogMode.Both, logFile);
 
     // read config
     var ymlFilePath = "config.yml";
     if (!File.Exists(ymlFilePath))
-      helper.MessageAndExit($"The file {ymlFilePath} does not exists. Stopping Import.");
+      Abort(log, $"The file {ymlFilePath} does not exists. Stopping Import.");
 
     AppConfig config = AppConfig.LoadFromYaml(ymlFilePath);
     if (config == null) Environment.Exit(1);
 
-    helper.LogLevel = config.Logging.Level;
-    helper.LogMode = config.Logging.Mode;
+    // Now with the configured level and mode.
+    log = new FileSyncLog(config.Logging.Level, (SamedisCare.Api.Logging.LogMode)config.Logging.Mode, logFile);
     if (!string.IsNullOrEmpty(config.CsvDelimiter))
       Helper.CsvDelimiter = config.CsvDelimiter;
 
-    helper.Message("Sync started.", 1);
+    log.Info("Sync started.");
 
     //test mode
     var testMode = false;
     var testFile = "test_output.csv";
     if (config.Testing.Active)
     {
-      helper.Message("Testing mode active, no changes will be applied.", 1, "INFO");
+      log.Info("Testing mode active, no changes will be applied.");
       testMode = true;
       if (File.Exists(testFile)) File.Delete(testFile);
     }
@@ -52,7 +56,7 @@ internal class Program
     // init authentication
     if (config.Auth.Uri.Length == 0 || config.Auth.ClientId.Length == 0 || config.Auth.ClientSecret.Length == 0)
     {
-      helper.Message($"Authentication configuration invalid, please check config.yml.", 1, "ERROR");
+      log.Error($"Authentication configuration invalid, please check config.yml.");
       return;
     }
 
@@ -70,19 +74,18 @@ internal class Program
 
     // The library logs through ISyncLog; this adapter keeps routing everything into the
     // existing Helper.Message, so log level, log mode and log file behave as before.
-    var syncLog = new SyncLogAdapter(helper);
 
-    var samedisAuth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, httpSettings, syncLog);
-    helper.Message($"Credential checkup Status: {samedisAuth.StatusCode} {samedisAuth.Status} User: {samedisAuth.User}", 1);
+    var samedisAuth = new Authenticate(config.Auth.Uri, config.Auth.ClientId, config.Auth.ClientSecret, httpSettings, log);
+    log.Info($"Credential checkup Status: {samedisAuth.StatusCode} {samedisAuth.Status} User: {samedisAuth.User}");
     var bearerToken = samedisAuth.BearerToken;
 
     if (string.IsNullOrWhiteSpace(bearerToken))
-      helper.MessageAndExit("Authentication failed: Bearer token is null or empty. Stopping Import.");
+      Abort(log, "Authentication failed: Bearer token is null or empty. Stopping Import.");
     if (string.IsNullOrWhiteSpace(config.Samedis.Uri))
-      helper.MessageAndExit("Samedis.Uri is not configured. Stopping Import.");
+      Abort(log, "Samedis.Uri is not configured. Stopping Import.");
 
     //define resource
-    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings, syncLog, testMode);
+    var samedisClient = new RequestData(config.Samedis.Uri, bearerToken, httpSettings, log, testMode);
 
     // Resource paths come from ITenantScope instead of string interpolation. Swapping this
     // one line for TenantScope.Enterprise(tenantId, clientId) is what an enterprise
@@ -105,10 +108,10 @@ internal class Program
       }
       catch { /* leave as unknown */ }
     }
-    helper.Message($"Tenant: {tenantName} (ID: {config.Samedis.TenantId})", 1);
+    log.Info($"Tenant: {tenantName} (ID: {config.Samedis.TenantId})");
 
     //check permissions
-    helper.CanDo(samedisClient, staffResource);
+    RequireAccess(log, samedisClient, staffResource);
 
     DataSet result = new();
     var importFile = config.ImportFile;
@@ -122,7 +125,7 @@ internal class Program
       case "csv":
         if (!File.Exists(importFile))
         {
-          helper.Message($"The file {importFile} does not exist. Stopping Import.", 1, "ERROR");
+          log.Error($"The file {importFile} does not exist. Stopping Import.");
           return;
         }
 
@@ -134,7 +137,7 @@ internal class Program
       case "excel":
         if (!File.Exists(importFile))
         {
-          helper.Message($"The file {importFile} does not exists. Stopping Import.", 1, "ERROR");
+          log.Error($"The file {importFile} does not exists. Stopping Import.");
           return;
         }
 
@@ -169,25 +172,25 @@ internal class Program
         break;
 
       case "ldap":
-        result = LdapHelper.FillDirectory(config.ImportLdap.Server, config.ImportLdap.Ssl, config.ImportLdap.Path, config.ImportLdap.Username, config.ImportLdap.Password, config.ImportLdap.Mapping, config.ImportLdap.Filter, helper, lastRun);
+        result = LdapHelper.FillDirectory(config.ImportLdap.Server, config.ImportLdap.Ssl, config.ImportLdap.Path, config.ImportLdap.Username, config.ImportLdap.Password, config.ImportLdap.Mapping, config.ImportLdap.Filter, log, lastRun);
         break;
 
       case "sap":
         if (!File.Exists(importFile))
         {
-          helper.Message($"The file {importFile} does not exists. Stopping Import.", 1, "ERROR");
+          log.Error($"The file {importFile} does not exists. Stopping Import.");
           return;
         }
-        var sap = SapImporter.Import(importFile, helper);
+        var sap = SapImporter.Import(importFile, log);
         result = sap.PersonnelDataSet;
 
-        helper.Message($"Unique Dienstarten: {sap.UniqueDienstarten.Count}", 2);
+        log.Debug($"Unique Dienstarten: {sap.UniqueDienstarten.Count}");
         break;
     }
 
     var orgData = OrgDataHelper.CollectUniqueOrgData(result);
-    helper.Message($"Unique Positions: {orgData.Positions.Count}", 2);
-    helper.Message($"Unique Departments: {orgData.Departments.Count}", 2);
+    log.Debug($"Unique Positions: {orgData.Positions.Count}");
+    log.Debug($"Unique Departments: {orgData.Departments.Count}");
 
     if (orgData.Positions.Count > 0 || orgData.Departments.Count > 0)
     {
@@ -207,7 +210,7 @@ internal class Program
       {
         if (string.IsNullOrWhiteSpace(dep.Title)) continue;
         var did = config.Options.CreateDepartments
-          ? Departments.FindOrCreateDepartment(samedisClient, departmentsResource, dep.Title, dep.Code, dep.CostCenter)
+          ? Departments.FindOrCreateDepartment(samedisClient, departmentsResource, dep)
           : Departments.FindDepartmentId(samedisClient, departmentsResource, dep.Title);
         if (!string.IsNullOrEmpty(did)) departmentIdsByTitle[dep.Key] = did!;
       }
@@ -240,7 +243,7 @@ internal class Program
     string[] importPresentColumns = Helper.GetAvailableColumns(result.Tables[0], importColumns);
     string[] importMandatoryColumns = ["Vorname", "Nachname", "Mitarbeiternr.", "Beitritt am", "Austritt am"];
     if (!Helper.CheckColumnsExist(result.Tables[0], importMandatoryColumns))
-      helper.MessageAndExit("Invalid Column mapping, stopping import.");
+      Abort(log, "Invalid Column mapping, stopping import.");
 
     var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
     var idfilter = "?gridfilter={\"id\": {\"filterType\": \"object_id\", \"type\": \"equals\", \"filter\": \"_ID_\"}}";
@@ -250,7 +253,7 @@ internal class Program
     foreach (DataTable table in result.Tables)
     {
 
-      helper.Message($"Number of records: {table.Rows.Count}.", 1);
+      log.Info($"Number of records: {table.Rows.Count}.");
 
       foreach (DataRow row in table.Rows)
       {
@@ -258,37 +261,37 @@ internal class Program
         var tmpEmpl = row["Mitarbeiternr."].ToString();
         if (string.IsNullOrEmpty(tmpEmpl))
         {
-          helper.Message($"SKIP: Missing EmployeeNo for \"{row["Nachname"]}\".");
+          log.Info($"SKIP: Missing EmployeeNo for \"{row["Nachname"]}\".");
           continue;
         }
 
         //validate date fields
         var tmpJoin = row["Beitritt am"]?.ToString();
-        if (!string.IsNullOrEmpty(tmpJoin) && Helper.TryParseDate(tmpJoin, out DateTime parsedJoin))
+        if (!string.IsNullOrEmpty(tmpJoin) && Helper.TryParseLdapDate(tmpJoin, out DateTime parsedJoin))
           tmpJoin = parsedJoin.ToString("dd.MM.yyyy");
         else
         {
-          helper.Message($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Beitritt am"]}");
+          log.Info($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Beitritt am"]}");
           continue;
         }
         var tmpLeft = row["Austritt am"].ToString();
         if (tmpLeft?.ToString().Length > 0)
         {
-          if (Helper.TryParseDate(tmpLeft, out DateTime parsedLeft))
+          if (Helper.TryParseLdapDate(tmpLeft, out DateTime parsedLeft))
             tmpLeft = parsedLeft.ToString("dd.MM.yyyy");
           else
           {
-            helper.Message($"SKIP: Invalid left date for \"{row["Nachname"]}\": {row["Austritt am"]}");
+            log.Info($"SKIP: Invalid left date for \"{row["Nachname"]}\": {row["Austritt am"]}");
             continue;
           }
           if (Convert.ToDateTime(tmpLeft) < Convert.ToDateTime(tmpJoin))
           {
-            helper.Message($"SKIP: Left date {row["Austritt am"]} is before join date {row["Beitritt am"]} for \"{row["Nachname"]}\".");
+            log.Info($"SKIP: Left date {row["Austritt am"]} is before join date {row["Beitritt am"]} for \"{row["Nachname"]}\".");
             continue;
           }
           if (Convert.ToDateTime(tmpLeft) > DateTime.Now.AddYears(10))
           {
-            helper.Message($"SKIP: Left date {row["Austritt am"]}, please leave this field blank instead of using dates far in the future for \"{row["Nachname"]}\".");
+            log.Info($"SKIP: Left date {row["Austritt am"]}, please leave this field blank instead of using dates far in the future for \"{row["Nachname"]}\".");
             continue;
           }
         }
@@ -352,7 +355,7 @@ internal class Program
         var staffObject = new JObject { ["data"] = dataObject };
 
         var staffBody = JsonConvert.SerializeObject(staffObject, Formatting.Indented);
-        helper.Message(staffBody, 2);
+        log.Debug(staffBody);
 
         if (!testMode)
         {
@@ -373,7 +376,7 @@ internal class Program
           {
             var remoteAttrs = record?.Data?[0].Attributes;
             var recordId = remoteAttrs?.Id ?? "";
-            helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} exists with record {recordId}", 2);
+            log.Debug($"Staff EmployeeNo {row["Mitarbeiternr."]} exists with record {recordId}");
 
             // LDAP reactivation / re-deactivation handling.
             // Only applies when the row was produced by the LDAP importer (i.e. carries
@@ -394,7 +397,7 @@ internal class Program
                   // date and (re-)send the joined date from the LDAP mapping.
                   dataObject["left"] = JValue.CreateNull();
                   dataObject["joined"] = tmpJoin;
-                  helper.Message($"Reactivation detected for EmployeeNo {row["Mitarbeiternr."]}: clearing left, joined='{tmpJoin}'.", 1);
+                  log.Info($"Reactivation detected for EmployeeNo {row["Mitarbeiternr."]}: clearing left, joined='{tmpJoin}'.");
                   staffObject = new JObject { ["data"] = dataObject };
                   staffBody = JsonConvert.SerializeObject(staffObject, Formatting.Indented);
                 }
@@ -405,7 +408,7 @@ internal class Program
                   // changed (whenChanged would otherwise drag the left date along).
                   if (dataObject.Remove("left"))
                   {
-                    helper.Message($"EmployeeNo {row["Mitarbeiternr."]} already deactivated; preserving remote left='{remoteAttrs?.Left}'.", 2);
+                    log.Debug($"EmployeeNo {row["Mitarbeiternr."]} already deactivated; preserving remote left='{remoteAttrs?.Left}'.");
                     staffObject = new JObject { ["data"] = dataObject };
                     staffBody = JsonConvert.SerializeObject(staffObject, Formatting.Indented);
                   }
@@ -424,7 +427,7 @@ internal class Program
               if (!incomingHasLeft && remoteHasLeft)
               {
                 dataObject["left"] = JValue.CreateNull();
-                helper.Message($"Empty left for EmployeeNo {row["Mitarbeiternr."]}: clearing remote left='{remoteAttrs?.Left}'.", 1);
+                log.Info($"Empty left for EmployeeNo {row["Mitarbeiternr."]}: clearing remote left='{remoteAttrs?.Left}'.");
                 staffObject = new JObject { ["data"] = dataObject };
                 staffBody = JsonConvert.SerializeObject(staffObject, Formatting.Indented);
               }
@@ -433,30 +436,45 @@ internal class Program
             if (Helper.StaffPayloadMatchesRemote(dataObject, remoteAttrs, out var diffReason))
             {
               unchangedCount++;
-              helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} unchanged, skipping update.", 2);
+              log.Debug($"Staff EmployeeNo {row["Mitarbeiternr."]} unchanged, skipping update.");
             }
             else if (!string.IsNullOrEmpty(recordId))
             {
-              helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} changed ({diffReason}), updating.", 2);
+              log.Debug($"Staff EmployeeNo {row["Mitarbeiternr."]} changed ({diffReason}), updating.");
               client = samedisClient.Put(staffResource, recordId, staffBody);
               updatedCount++;
-              helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
+              log.Debug($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}");
             }
           }
           else
           {
-            helper.Message($"Staff EmployeeNo {row["Mitarbeiternr."]} does not exists", 2);
+            log.Debug($"Staff EmployeeNo {row["Mitarbeiternr."]} does not exists");
             client = samedisClient.Post(staffResource, staffBody);
             createdCount++;
-            helper.Message($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}", 2);
+            log.Debug($"Status Code: {samedisClient.StatusCode} {samedisClient.Status}");
           }
         }
         else
         {
-          helper.AppendJsonAsCsv(testFile, staffBody);
+          Helper.AppendJsonAsCsv(testFile, staffBody);
         }
       }
     }
-    helper.Message($"Sync finished. Created: {createdCount}, Updated: {updatedCount}, Unchanged: {unchangedCount}.", 1);
+    log.Info($"Sync finished. Created: {createdCount}, Updated: {updatedCount}, Unchanged: {unchangedCount}.");
+  }
+
+  // Terminating the run is the host's decision, so it lives here and not in the library
+  // or in Helper. Capability.Probe only reports whether a resource is readable.
+  private static void Abort(ISyncLog log, string message)
+  {
+    log.Error(message);
+    Environment.Exit(1);
+  }
+
+  private static void RequireAccess(ISyncLog log, RequestData client, string resource)
+  {
+    var result = Capability.Probe(client, resource);
+    if (!result.Allowed)
+      Abort(log, $"Sync stopped. {result.StatusCode} {result.Message}");
   }
 }

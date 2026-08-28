@@ -405,3 +405,6 @@ test_departments.csv
 .gitignore
 debug_get_requests.csv
 test_positions.csv
+
+# local-only package source for testing SamedisCare.Api before it is published
+nuget.config
