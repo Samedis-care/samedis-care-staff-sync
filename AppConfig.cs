@@ -1,4 +1,3 @@
-using SamedisCare.Helper.Config;
 using SamedisCare.Helper.Data;
 
 namespace SamedisStaffSync
@@ -18,17 +17,6 @@ namespace SamedisStaffSync
     public TestingConfig Testing { get; set; } = new TestingConfig();
     public OptionsConfig Options { get; set; } = new OptionsConfig();
 
-    /// <summary>
-    /// Loads config.yml through SamedisCare.Helper, which replaces the LoadFromYaml copy
-    /// that six of the sync tools carried.
-    /// </summary>
-    /// <remarks>
-    /// ignoreUnmatchedProperties stays FALSE, which is what this tool did before: an
-    /// unknown key in config.yml fails the run rather than being skipped silently, so a
-    /// typo cannot quietly disable an option.
-    /// </remarks>
-    public static AppConfig LoadFromYaml(string filePath)
-      => ConfigStore.Load<AppConfig>(filePath, ignoreUnmatchedProperties: false);
   }
 
   public class AuthConfig

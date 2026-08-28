@@ -12,6 +12,8 @@ using SamedisCare.Helper;
 using SamedisCare.Api.V4.Common;
 using SamedisCare.Helper.Data;
 using SamedisCare.Helper.Text;
+using SamedisCare.Helper.Config;
+using SamedisCare.Api.Query;
 
 namespace SamedisStaffSync;
 
@@ -31,7 +33,7 @@ internal class Program
     if (!File.Exists(ymlFilePath))
       Abort(log, $"The file {ymlFilePath} does not exists. Stopping Import.");
 
-    AppConfig config = AppConfig.LoadFromYaml(ymlFilePath);
+    AppConfig config = ConfigStore.Load<AppConfig>(ymlFilePath, ignoreUnmatchedProperties: false);
     if (config == null) Environment.Exit(1);
 
     // Now with the configured level and mode.
@@ -240,8 +242,16 @@ internal class Program
     if (!Csv.HasColumns(result.Tables[0], importMandatoryColumns))
       Abort(log, "Invalid Column mapping, stopping import.");
 
-    var filter = "?gridfilter={\"employee_no\": {\"filterType\": \"text\", \"type\": \"equals\", \"filter\": \"_EMPLOYEENO_\"}}";
-    var idfilter = "?gridfilter={\"id\": {\"filterType\": \"object_id\", \"type\": \"equals\", \"filter\": \"_ID_\"}}";
+    // Built per row with FilterBuilder instead of a template string plus Replace. The
+    // template was neither url-encoded nor JSON-escaped, so an employee number containing
+    // '&', '#' or a quote produced a broken filter and the existence check then compared
+    // against a truncated value.
+    static string ExistsFilter(string field, FilterBuilder.Type type, string value)
+    {
+      var f = new FilterBuilder();
+      f.Add(field, FilterBuilder.FilterType.Equals, type, value);
+      return "?gridfilter=" + f.Get();
+    }
 
     int createdCount = 0, updatedCount = 0, unchangedCount = 0;
 
@@ -357,8 +367,8 @@ internal class Program
           // check if exists
           var requestResource = staffResource;
           requestResource += !string.IsNullOrEmpty(attributes.Id)
-                          ? idfilter.Replace("_ID_", attributes.Id, StringComparison.OrdinalIgnoreCase)
-                          : filter.Replace("_EMPLOYEENO_", row["Mitarbeiternr."].ToString(), StringComparison.OrdinalIgnoreCase);
+                          ? ExistsFilter("id", FilterBuilder.Type.ObjectId, attributes.Id)
+                          : ExistsFilter("employee_no", FilterBuilder.Type.Text, row["Mitarbeiternr."].ToString() ?? "");
 
           var client = samedisClient.Get(requestResource);
           Staffs.Root? record = null;

@@ -5,6 +5,7 @@ using System.Net;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using SamedisCare.Helper.Logging;
+using SamedisCare.Helper;
 
 namespace SamedisStaffSync
 {
@@ -117,7 +118,7 @@ namespace SamedisStaffSync
               if (whenChangedAttr != null && whenChangedAttr.Count > 0)
               {
                 string whenChangedString = whenChangedAttr[0]?.ToString() ?? string.Empty;
-                if (DateTime.TryParseExact(whenChangedString, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime whenChanged))
+                if (Dates.TryParseGeneralizedTime(whenChangedString, out DateTime whenChanged))
                 {
                   if (whenChanged <= lastRun)
                   {
