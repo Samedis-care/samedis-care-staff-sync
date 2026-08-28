@@ -4,7 +4,7 @@ using System.DirectoryServices.Protocols;
 using System.Net;
 using Newtonsoft.Json;
 using System.Collections.Generic;
-using SamedisCare.Api.Logging;
+using SamedisCare.Helper.Logging;
 
 namespace SamedisStaffSync
 {

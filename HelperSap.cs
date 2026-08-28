@@ -1,7 +1,8 @@
 using System.Data;
 using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Common;
-using SamedisCare.Api.Logging;
+using SamedisCare.Helper;
+using SamedisCare.Helper.Logging;
 
 namespace SamedisStaffSync
 {

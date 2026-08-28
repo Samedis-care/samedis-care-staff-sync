@@ -1,48 +1,48 @@
 using System.Data;
 using System.Data.Common;
+using SamedisCare.Helper.Data;
 
 namespace SamedisStaffSync
 {
-  class DbHelper
+  /// <summary>
+  /// Maps this tool's configured database type onto a provider factory and delegates the
+  /// actual work to SamedisCare.Helper.Data.Database.
+  /// <para>
+  /// The factory mapping stays here on purpose: it is the only place that names a driver,
+  /// so the shared package needs no driver reference and no consumer pulls in providers it
+  /// does not use.
+  /// </para>
+  /// </summary>
+  static class DbHelper
   {
-    public static string GetConnectionString(ImportSqlConfig config)
+    private static DbProviderFactory Factory(DatabaseType provider) => provider switch
     {
-      return config.DatabaseType switch
+      DatabaseType.SqlServer => System.Data.SqlClient.SqlClientFactory.Instance,
+      DatabaseType.MySql => MySql.Data.MySqlClient.MySqlClientFactory.Instance,
+      DatabaseType.SQLite => Microsoft.Data.Sqlite.SqliteFactory.Instance,
+      _ => throw new NotSupportedException($"Unsupported database type: {provider}"),
+    };
+
+    private static DbKind Kind(DatabaseType provider) => provider switch
+    {
+      DatabaseType.SqlServer => DbKind.SqlServer,
+      DatabaseType.MySql => DbKind.MySql,
+      DatabaseType.SQLite => DbKind.Sqlite,
+      _ => throw new NotSupportedException($"Unsupported database type: {provider}"),
+    };
+
+    public static string GetConnectionString(ImportSqlConfig config)
+      => Database.BuildConnectionString(Kind(config.DatabaseType), new DbConnectionSettings
       {
-        DatabaseType.SqlServer => !string.IsNullOrEmpty(config.Port)
-                                ? $"Data Source={config.Server},{config.Port};Initial Catalog={config.Database};User Id={config.Username};Password={config.Password};"
-                                : $"Data Source={config.Server};Initial Catalog={config.Database};User Id={config.Username};Password={config.Password};",
-        DatabaseType.MySql => $"Server={config.Server};Port={config.Port};Database={config.Database};User Id={config.Username};Password={config.Password};AllowPublicKeyRetrieval={config.AllowPublicKeyRetrieval};",
-        DatabaseType.SQLite => $"Data Source={config.Server};",
-        _ => throw new NotSupportedException("Unsupported database type"),
-      };
-    }
+        Server = config.Server,
+        Port = config.Port,
+        Database = config.Database,
+        Username = config.Username,
+        Password = config.Password,
+        AllowPublicKeyRetrieval = config.AllowPublicKeyRetrieval,
+      });
 
     public static DataSet ExecuteQuery(DatabaseType provider, string connectionString, string query)
-    {
-      DataSet dataSet = new();
-      DbProviderFactory factory = provider switch
-      {
-        DatabaseType.SqlServer => System.Data.SqlClient.SqlClientFactory.Instance,
-        DatabaseType.MySql => MySql.Data.MySqlClient.MySqlClientFactory.Instance,
-        DatabaseType.SQLite => Microsoft.Data.Sqlite.SqliteFactory.Instance,
-        _ => throw new NotSupportedException("Unsupported database type"),
-      };
-      using (DbConnection connection = factory.CreateConnection() ?? throw new InvalidOperationException("Failed to create a database connection."))
-      {
-        connection.ConnectionString = connectionString;
-        connection.Open();
-
-        using DbCommand command = factory.CreateCommand() ?? throw new InvalidOperationException("Failed to create a database command.");
-        command.Connection = connection;
-        command.CommandText = query;
-
-        using DbDataReader reader = command.ExecuteReader();
-        DataTable dataTable = new();
-        dataTable.Load(reader);
-        dataSet.Tables.Add(dataTable);
-      }
-      return dataSet;
-    }
+      => Database.QueryAsDataSet(Factory(provider), connectionString, query);
   }
 }

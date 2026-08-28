@@ -6,9 +6,11 @@ using CsvHelper.Configuration;
 using Newtonsoft.Json.Linq;
 using System.Reflection;
 using SamedisCare.Api.Http;
-using SamedisCare.Api.Logging;
+using SamedisCare.Helper.Logging;
 using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Common;
+using SamedisCare.Helper;
+using SamedisCare.Helper.Text;
 
 namespace SamedisStaffSync
 {
@@ -19,51 +21,17 @@ namespace SamedisStaffSync
     // Logging lives in SamedisCare.Api.Logging.FileSyncLog. This class no longer
     // carries a copy of it, and no longer needs to be instantiated at all.
 
+    // CSV reading, column checks and writing now come from SamedisCare.Helper.Text.Csv.
+    // Thin wrappers are kept so the many call sites in Program.cs stay unchanged.
     public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true, string? delimeter = null)
-    {
-      var dt = new DataTable();
-
-      var config = new CsvConfiguration(CultureInfo.InvariantCulture)
-      {
-        HasHeaderRecord = hasHeader,
-        Delimiter = delimeter ?? CsvDelimiter,
-        Encoding = System.Text.Encoding.UTF8,
-        DetectColumnCountChanges = true,
-        BadDataFound = null // ignore bad data gracefully
-      };
-
-      using (var reader = new StreamReader(filePath, System.Text.Encoding.UTF8))
-      using (var csv = new CsvReader(reader, config))
-      {
-        using var dr = new CsvDataReader(csv);
-        dt.Load(dr);
-      }
-
-      return dt;
-    }
+      => Csv.Read(filePath, hasHeader, delimeter ?? CsvDelimiter);
 
     public static bool CheckColumnsExist(DataTable dataTable, string[] requiredColumns)
-    {
-      foreach (var columnName in requiredColumns)
-      {
-        if (!dataTable.Columns.Contains(columnName))
-          return false;
-      }
-      return true;
-    }
+      => Csv.HasColumns(dataTable, requiredColumns);
 
     public static string[] GetAvailableColumns(DataTable dataTable, string[] importColumns)
-    {
-      return importColumns
-          .Where(columnName => dataTable.Columns.Contains(columnName))
-          .ToArray();
-    }
+      => Csv.AvailableColumns(dataTable, importColumns);
 
-    /// <summary>
-    /// Parses a date coming from Active Directory. Renamed from TryParseDate because the
-    /// GeneralizedTime form (e.g. 20240531193352.0Z) is an LDAP special case and does not
-    /// belong in the shared library - only the generic fallback does.
-    /// </summary>
     public static bool TryParseLdapDate(string stringDate, out DateTime result)
       => Dates.TryParseGeneralizedTime(stringDate, out result);
 
@@ -175,13 +143,13 @@ namespace SamedisStaffSync
 
         if (needsHeader)
         {
-          var headerLine = string.Join(delimiter, StaffCsvColumns.Select(EscapeCsvValue));
+          var headerLine = string.Join(delimiter, StaffCsvColumns.Select(v => Csv.Escape(v)));
           File.AppendAllText(filePath, headerLine + Environment.NewLine);
         }
 
         var values = StaffCsvColumns
           .Select(column => dataObject.TryGetValue(column, out var token) ? TokenToString(token) : string.Empty)
-          .Select(EscapeCsvValue);
+          .Select(v => Csv.Escape(v));
 
         var dataLine = string.Join(delimiter, values);
         File.AppendAllText(filePath, dataLine + Environment.NewLine);
@@ -193,48 +161,14 @@ namespace SamedisStaffSync
     }
 
     public static void WriteCsv(string filePath, string[] headers, IEnumerable<string[]> rows)
-    {
-      var delimiter = Helper.CsvDelimiter;
-      var lines = new List<string>
-      {
-        string.Join(delimiter, headers.Select(EscapeCsvValue))
-      };
-
-      foreach (var row in rows)
-      {
-        lines.Add(string.Join(delimiter, row.Select(EscapeCsvValue)));
-      }
-
-      File.WriteAllText(filePath, string.Join(Environment.NewLine, lines));
-    }
+      => Csv.Write(filePath, headers, rows);
 
     private static string TokenToString(JToken token)
-    {
-      return token.Type switch
-      {
-        JTokenType.Array => string.Join("|", token.Select(TokenToString)),
-        JTokenType.Object => token.ToString(Formatting.None),
-        JTokenType.Null or JTokenType.Undefined => string.Empty,
-        JTokenType.Date => token.Value<DateTime>().ToString("o", CultureInfo.InvariantCulture),
-        _ => token.ToString()
-      };
-    }
-
-    private static string EscapeCsvValue(string value)
-    {
-      if (string.IsNullOrEmpty(value))
-        return string.Empty;
-
-      var needsQuotes = value.Contains('"') || value.Contains(CsvDelimiter) || value.Contains('\r') || value.Contains('\n');
-      var sanitized = value.Replace("\"", "\"\"");
-      return needsQuotes ? $"\"{sanitized}\"" : sanitized;
-    }
-
-    /// <summary>
-    /// Ensures JSON can be parsed whether "data" is a single object or array.
-    /// </summary>
-    // SingleOrArrayConverter was dead here once the resource models moved to the
-    // library - the models use SamedisCare.Api.Common.Helper's converter.
+      => token.Type is JTokenType.Null or JTokenType.Undefined
+           ? string.Empty
+           : token is JArray or JObject
+             ? token.ToString(Formatting.None)
+             : token.ToString();
   }
 
   public class UniqueOrgData

@@ -5,9 +5,10 @@ using Newtonsoft.Json.Linq;
 using SamedisCare.Api.Routing;
 using SamedisCare.Api.Auth;
 using SamedisCare.Api.Http;
-using SamedisCare.Api.Logging;
+using SamedisCare.Helper.Logging;
 using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Common;
+using SamedisCare.Helper;
 using SamedisCare.Api.V4.Common;
 
 namespace SamedisStaffSync;
@@ -21,7 +22,7 @@ internal class Program
     // config that carries the real level and mode is only read below - and reading it can
     // already fail and needs to log.
     var logFile = Path.Combine("log", "Logfile_" + DateTime.Now.ToShortDateString() + ".log");
-    ISyncLog log = new FileSyncLog(1, SamedisCare.Api.Logging.LogMode.Both, logFile);
+    ISyncLog log = new FileSyncLog(1, SamedisCare.Helper.Logging.LogMode.Both, logFile);
 
     // read config
     var ymlFilePath = "config.yml";
@@ -32,7 +33,7 @@ internal class Program
     if (config == null) Environment.Exit(1);
 
     // Now with the configured level and mode.
-    log = new FileSyncLog(config.Logging.Level, (SamedisCare.Api.Logging.LogMode)config.Logging.Mode, logFile);
+    log = new FileSyncLog(config.Logging.Level, (SamedisCare.Helper.Logging.LogMode)config.Logging.Mode, logFile);
     if (!string.IsNullOrEmpty(config.CsvDelimiter))
       Helper.CsvDelimiter = config.CsvDelimiter;
 
