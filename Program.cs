@@ -1,3 +1,4 @@
+using SamedisCare.Api.Lookup;
 ﻿using Newtonsoft.Json;
 using ExcelDataReader;
 using System.Data;
@@ -26,7 +27,10 @@ internal class Program
     // Bootstrap logger with the previous defaults (level 1, console + file), because the
     // config that carries the real level and mode is only read below - and reading it can
     // already fail and needs to log.
-    var logFile = Path.Combine("log", "Logfile_" + DateTime.Now.ToShortDateString() + ".log");
+    // Formatted invariantly, not with ToShortDateString(): that is culture-dependent and
+    // yields "8/30/2026" in several cultures, whose slash turns the file name into a
+    // directory path. yyyy-MM-dd also sorts.
+    var logFile = Path.Combine("log", $"Logfile_{DateTime.Now:yyyy-MM-dd}.log");
     ISyncLog log = new FileSyncLog(1, SamedisCare.Helper.Logging.LogMode.Both, logFile);
 
     // read config
@@ -195,15 +199,17 @@ internal class Program
 
     if (orgData.Positions.Count > 0 || orgData.Departments.Count > 0)
     {
-      var positionsResource = scope.Resource("positions");
-      var departmentsResource = scope.Resource("departments");
+      // One lookup per collection: it remembers hits and misses, so a title repeated across
+      // source rows costs a single request.
+      var positionLookup = new ResourceLookup(samedisClient, scope.Resource("positions"), scope.KeyLookup);
+      var departmentLookup = new ResourceLookup(samedisClient, scope.Resource("departments"), scope.KeyLookup);
 
       foreach (var posTitle in orgData.Positions)
       {
         if (string.IsNullOrWhiteSpace(posTitle)) continue;
         var pid = config.Options.CreatePositions
-          ? Positions.FindOrCreatePosition(samedisClient, positionsResource, posTitle)
-          : Positions.FindPositionId(samedisClient, positionsResource, posTitle);
+          ? Positions.FindOrCreatePosition(samedisClient, positionLookup, posTitle, log)
+          : Positions.FindPositionId(positionLookup, posTitle);
         if (!string.IsNullOrEmpty(pid)) positionIdsByTitle[posTitle] = pid!;
       }
 
@@ -211,8 +217,8 @@ internal class Program
       {
         if (string.IsNullOrWhiteSpace(dep.Title)) continue;
         var did = config.Options.CreateDepartments
-          ? Departments.FindOrCreateDepartment(samedisClient, departmentsResource, dep)
-          : Departments.FindDepartmentId(samedisClient, departmentsResource, dep.Title);
+          ? Departments.FindOrCreateDepartment(samedisClient, departmentLookup, dep, log)
+          : Departments.FindDepartmentId(departmentLookup, dep.Title);
         if (!string.IsNullOrEmpty(did)) departmentIdsByTitle[dep.Key] = did!;
       }
     }

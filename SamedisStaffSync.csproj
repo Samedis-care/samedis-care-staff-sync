@@ -20,16 +20,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The test project lives under tests/ and compiles separately. -->
+    <Compile Remove="tests/**" />
+    <None Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Shared Samedis.care API layer: Authenticate, RequestData, HttpSettings,
          FilterBuilder, ITenantScope and the Staffs/Positions/Departments resources.
          Replaces the former local Samedis.cs, Staffs.cs, Positions.cs and
          Departments.cs. See https://github.com/Samedis-care/samedis-care-dotnet -->
-    <PackageReference Include="SamedisCare.Api" Version="0.2.0-rc.2" />
+    <PackageReference Include="SamedisCare.Api" Version="0.3.0-rc.19" />
 
     <!-- Config loading, CSV, database access, date parsing and logging. Referenced
          explicitly even though SamedisCare.Api already pulls it in, because this tool
          uses it directly. -->
-    <PackageReference Include="SamedisCare.Helper" Version="0.2.0-rc.2" />
+    <PackageReference Include="SamedisCare.Helper" Version="0.3.0-rc.19" />
 
     <PackageReference Include="ExcelDataReader" Version="3.6.0" />
     <PackageReference Include="ExcelDataReader.DataSet" Version="3.6.0" />
