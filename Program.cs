@@ -112,7 +112,20 @@ internal class Program
     // /api/{version}/user/tenants/{id}, which Tenant.GetSettings requests. That also
     // reads `name` (the serializer has no `title`) and logs a warning when the request
     // fails, instead of silently reporting an unknown tenant.
-    var tenantSettings = Tenant.GetSettings(samedisClient, config.Samedis.ApiVersion, config.Samedis.TenantId, log);
+    // Only the name is used below, but a tenant whose settings do not answer is one this run
+    // cannot reach at all — so it stops rather than importing people into something it could
+    // not identify.
+    Tenant.Settings tenantSettings;
+    try
+    {
+      tenantSettings = Tenant.GetSettings(samedisClient, config.Samedis.ApiVersion, config.Samedis.TenantId, log);
+    }
+    catch (LookupUnavailableException ex)
+    {
+      log.Error($"Tenant settings could not be read. Stopping. {ex.Message}");
+      Environment.Exit(1);
+      return;
+    }
     log.Info($"Tenant: {(string.IsNullOrEmpty(tenantSettings.Name) ? "<unknown>" : tenantSettings.Name)} (ID: {config.Samedis.TenantId})");
 
     //check permissions

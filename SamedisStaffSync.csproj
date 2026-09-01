@@ -29,12 +29,12 @@
          FilterBuilder, ITenantScope and the Staffs/Positions/Departments resources.
          Replaces the former local Samedis.cs, Staffs.cs, Positions.cs and
          Departments.cs. See https://github.com/Samedis-care/samedis-care-dotnet -->
-    <PackageReference Include="SamedisCare.Api" Version="0.3.0-rc.21" />
+    <PackageReference Include="SamedisCare.Api" Version="0.3.0-rc.23" />
 
     <!-- Config loading, CSV, database access, date parsing and logging. Referenced
          explicitly even though SamedisCare.Api already pulls it in, because this tool
          uses it directly. -->
-    <PackageReference Include="SamedisCare.Helper" Version="0.3.0-rc.21" />
+    <PackageReference Include="SamedisCare.Helper" Version="0.3.0-rc.23" />
 
     <PackageReference Include="ExcelDataReader" Version="3.6.0" />
     <PackageReference Include="ExcelDataReader.DataSet" Version="3.6.0" />
