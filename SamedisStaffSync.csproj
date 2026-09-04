@@ -20,18 +20,33 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CsvHelper" Version="33.1.0" />
+    <!-- The test project lives under tests/ and compiles separately. -->
+    <Compile Remove="tests/**" />
+    <None Remove="tests/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Shared Samedis.care API layer: Authenticate, RequestData, HttpSettings,
+         FilterBuilder, ITenantScope and the Staffs/Positions/Departments resources.
+         Replaces the former local Samedis.cs, Staffs.cs, Positions.cs and
+         Departments.cs. See https://github.com/Samedis-care/samedis-care-dotnet -->
+    <PackageReference Include="SamedisCare.Api" Version="0.3.0-rc.23" />
+
+    <!-- Config loading, CSV, database access, date parsing and logging. Referenced
+         explicitly even though SamedisCare.Api already pulls it in, because this tool
+         uses it directly. -->
+    <PackageReference Include="SamedisCare.Helper" Version="0.3.0-rc.23" />
+
     <PackageReference Include="ExcelDataReader" Version="3.6.0" />
     <PackageReference Include="ExcelDataReader.DataSet" Version="3.6.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.1" />
     <PackageReference Include="MySql.Data" Version="8.3.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
-    <PackageReference Include="Oracle.ManagedDataAccess" Version="21.13.0" />
-    <PackageReference Include="RestSharp" Version="112.0.0" />
+    <!-- Newtonsoft.Json and RestSharp aligned with what SamedisCare.Api brings, so
+         NuGet does not have to resolve two different versions. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="RestSharp" Version="112.1.0" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.118" PrivateAssets="none" />
     <PackageReference Include="System.DirectoryServices.Protocols" Version="8.0.0" />
-    <PackageReference Include="YamlDotNet" Version="13.7.1" />
   </ItemGroup>
 
 </Project>

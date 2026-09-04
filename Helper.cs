@@ -1,101 +1,19 @@
 using System.Data;
 using System.Globalization;
 using Newtonsoft.Json;
-using CsvHelper;
-using CsvHelper.Configuration;
 using Newtonsoft.Json.Linq;
 using System.Reflection;
+using SamedisCare.Api.V4.Public;
+using SamedisCare.Helper;
+using SamedisCare.Helper.Text;
 
 namespace SamedisStaffSync
 {
-  public class Helper
+  public static class Helper
   {
-    /// <summary>
-    /// LogLevel 0: turned off
-    /// LogLevel 1: normal output
-    /// LogLevel 2: debug output
-    /// </summary>
-    public int LogLevel = 1;
-    /// <summary>
-    /// LogMode 0: no output
-    /// LogMode 1: Console Output
-    /// LogMode 2: LogFile
-    /// LofMode 3: Console and Logfile
-    /// </summary>
-    public int LogMode = 3;
-    public string LogFile = "debug.log";
-    public static string CsvDelimiter = ";";
-
-    public void Message(string message, int logLevel = 1, string logType = "INFO")
-    {
-      if (logLevel > LogLevel) return;
-      const string format = "yyyy-MM-dd HH:mm:ss";
-
-      if (LogMode == 1 || LogMode == 3)
-      {
-        Console.WriteLine(new string('*', 80));
-        Console.WriteLine(DateTime.Now.ToString(format) + " " + message);
-      }
-
-      if (LogMode < 2) return;
-      Directory.CreateDirectory("log");
-      var logContent = string.Empty;
-      logContent += DateTime.Now.ToString(format) + " ";
-      logContent += logType + " ";
-      if (!string.IsNullOrEmpty(message))
-        logContent += message;
-      File.AppendAllText(Path.Combine("log", LogFile), logContent + "\n");
-    }
-
-    public static DataTable ReadCsvWithCsvHelper(string filePath, bool hasHeader = true, string? delimeter = null)
-    {
-      var dt = new DataTable();
-
-      var config = new CsvConfiguration(CultureInfo.InvariantCulture)
-      {
-        HasHeaderRecord = hasHeader,
-        Delimiter = delimeter ?? CsvDelimiter,
-        Encoding = System.Text.Encoding.UTF8,
-        DetectColumnCountChanges = true,
-        BadDataFound = null // ignore bad data gracefully
-      };
-
-      using (var reader = new StreamReader(filePath, System.Text.Encoding.UTF8))
-      using (var csv = new CsvReader(reader, config))
-      {
-        using var dr = new CsvDataReader(csv);
-        dt.Load(dr);
-      }
-
-      return dt;
-    }
-
-    public static bool CheckColumnsExist(DataTable dataTable, string[] requiredColumns)
-    {
-      foreach (var columnName in requiredColumns)
-      {
-        if (!dataTable.Columns.Contains(columnName))
-          return false;
-      }
-      return true;
-    }
-
-    public static string[] GetAvailableColumns(DataTable dataTable, string[] importColumns)
-    {
-      return importColumns
-          .Where(columnName => dataTable.Columns.Contains(columnName))
-          .ToArray();
-    }
-
-    public static bool TryParseDate(string stringDate, out DateTime result)
-    {
-      // Try to parse AD GeneralizedTime format (e.g., 20240531193352.0Z)
-      if (DateTime.TryParseExact(stringDate, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out result))
-        return true;
-
-      // Try general DateTime parsing for other formats
-      return DateTime.TryParse(stringDate, out result);
-    }
+    // CSV reading and writing, column checks, date parsing and logging all come from
+    // SamedisCare.Helper and are called directly at the call sites. What is left here is
+    // specific to this import.
 
     /// <summary>
     /// Returns true when every field in the outgoing payload already matches the remote attributes.
@@ -157,35 +75,19 @@ namespace SamedisStaffSync
       return true;
     }
 
+    // Styles are passed explicitly to keep the previous behaviour exactly: the known
+    // dd.MM.yyyy form must NOT be normalized to UTC (that would move midnight to the
+    // previous day at a positive offset), while the fallback still normalizes.
     private static bool TryParseStaffDate(string s, out DateTime date)
-    {
-      date = default;
-      if (string.IsNullOrWhiteSpace(s)) return false;
-      if (DateTime.TryParseExact(s, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out date)) return true;
-      if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out date)) return true;
-      return DateTime.TryParse(s, out date);
-    }
+      => Dates.TryParse(s, out date,
+                        formats: new[] { "dd.MM.yyyy" },
+                        culture: CultureInfo.InvariantCulture,
+                        styles: DateTimeStyles.None,
+                        fallbackStyles: DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
-    public void CanDo(RequestData client, string resource)
-    {
-      var requestResource = resource + "?limit=0";
-      var check = client.Get(requestResource);
-      if (client.StatusCode >= 400)
-      {
-        Staffs.Root? record = null;
-        if (!string.IsNullOrEmpty(check))
-          record = JsonConvert.DeserializeObject<Staffs.Root>(check);
-        var errorMsg = record?.Meta?.Msg?.Message ?? "Unknown error";
-        MessageAndExit($"Sync stopped. {client.StatusCode} {errorMsg}");
-      }
-    }
-
-    internal string MessageAndExit(string errorMessage)
-    {
-      Message(errorMessage, 1);
-      Environment.Exit(1);
-      return null; // Unreachable Code, just for compiler
-    }
+    // CanDo and MessageAndExit moved to Program: the probe itself is Capability.Probe
+    // in the library, and terminating the process is the host's decision, not a
+    // helper's - see RequireAccess and Abort there.
 
     private static readonly string[] StaffCsvColumns = typeof(Staffs.Attributes)
       .GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -198,7 +100,7 @@ namespace SamedisStaffSync
       .Where(name => !string.Equals(name, "id", StringComparison.OrdinalIgnoreCase))
       .ToArray();
 
-    public void AppendJsonAsCsv(string filePath, string json)
+    public static void AppendJsonAsCsv(string filePath, string json, string delimiter)
     {
       if (string.IsNullOrWhiteSpace(json))
         return;
@@ -217,17 +119,16 @@ namespace SamedisStaffSync
         }
 
         var needsHeader = !File.Exists(filePath) || new FileInfo(filePath).Length == 0;
-        var delimiter = Helper.CsvDelimiter;
 
         if (needsHeader)
         {
-          var headerLine = string.Join(delimiter, StaffCsvColumns.Select(EscapeCsvValue));
+          var headerLine = string.Join(delimiter, StaffCsvColumns.Select(v => Csv.Escape(v)));
           File.AppendAllText(filePath, headerLine + Environment.NewLine);
         }
 
         var values = StaffCsvColumns
           .Select(column => dataObject.TryGetValue(column, out var token) ? TokenToString(token) : string.Empty)
-          .Select(EscapeCsvValue);
+          .Select(v => Csv.Escape(v));
 
         var dataLine = string.Join(delimiter, values);
         File.AppendAllText(filePath, dataLine + Environment.NewLine);
@@ -238,74 +139,12 @@ namespace SamedisStaffSync
       }
     }
 
-    public static void WriteCsv(string filePath, string[] headers, IEnumerable<string[]> rows)
-    {
-      var delimiter = Helper.CsvDelimiter;
-      var lines = new List<string>
-      {
-        string.Join(delimiter, headers.Select(EscapeCsvValue))
-      };
-
-      foreach (var row in rows)
-      {
-        lines.Add(string.Join(delimiter, row.Select(EscapeCsvValue)));
-      }
-
-      File.WriteAllText(filePath, string.Join(Environment.NewLine, lines));
-    }
-
     private static string TokenToString(JToken token)
-    {
-      return token.Type switch
-      {
-        JTokenType.Array => string.Join("|", token.Select(TokenToString)),
-        JTokenType.Object => token.ToString(Formatting.None),
-        JTokenType.Null or JTokenType.Undefined => string.Empty,
-        JTokenType.Date => token.Value<DateTime>().ToString("o", CultureInfo.InvariantCulture),
-        _ => token.ToString()
-      };
-    }
-
-    private static string EscapeCsvValue(string value)
-    {
-      if (string.IsNullOrEmpty(value))
-        return string.Empty;
-
-      var needsQuotes = value.Contains('"') || value.Contains(CsvDelimiter) || value.Contains('\r') || value.Contains('\n');
-      var sanitized = value.Replace("\"", "\"\"");
-      return needsQuotes ? $"\"{sanitized}\"" : sanitized;
-    }
-
-    /// <summary>
-    /// Ensures JSON can be parsed whether "data" is a single object or array.
-    /// </summary>
-    public class SingleOrArrayConverter<T> : JsonConverter
-    {
-      public override bool CanConvert(Type objectType) => objectType == typeof(List<T>);
-
-      public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
-      {
-        var token = JToken.Load(reader);
-        if (token.Type == JTokenType.Array)
-          return token.ToObject<List<T>>(serializer) ?? [];
-
-        var obj = token.ToObject<T>(serializer);
-        return obj != null ? new List<T> { obj } : [];
-      }
-
-      public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
-      {
-        serializer.Serialize(writer, value);
-      }
-    }
-  }
-
-  public class DepartmentInfo
-  {
-    public string Key { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public string? Code { get; set; }
-    public string? CostCenter { get; set; }
+      => token.Type is JTokenType.Null or JTokenType.Undefined
+           ? string.Empty
+           : token is JArray or JObject
+             ? token.ToString(Formatting.None)
+             : token.ToString();
   }
 
   public class UniqueOrgData
@@ -378,12 +217,5 @@ namespace SamedisStaffSync
     }
   }
 
-  public enum DatabaseType
-  {
-    SqlServer,
-    MySql,
-    SQLite,
-    Oracle
-  }
 
 }

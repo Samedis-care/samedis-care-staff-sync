@@ -1,5 +1,4 @@
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
+using SamedisCare.Helper.Data;
 
 namespace SamedisStaffSync
 {
@@ -18,14 +17,6 @@ namespace SamedisStaffSync
     public TestingConfig Testing { get; set; } = new TestingConfig();
     public OptionsConfig Options { get; set; } = new OptionsConfig();
 
-    public static AppConfig LoadFromYaml(string filePath)
-    {
-      using var input = File.OpenText(filePath);
-      var deserializerBuilder = new DeserializerBuilder().WithNamingConvention(UnderscoredNamingConvention.Instance);
-      var deserializer = deserializerBuilder.Build();
-      var result = deserializer.Deserialize<AppConfig>(input);
-      return result;
-    }
   }
 
   public class AuthConfig
@@ -54,17 +45,22 @@ namespace SamedisStaffSync
     public string Proxy { get; set; } = "";
     public string ProxyUsername { get; set; } = "";
     public string ProxyPassword { get; set; } = "";
+
+    /// <summary>
+    /// Hard timeout per HTTP request, in seconds. Before the migration to
+    /// SamedisCare.Api this tool set no timeout at all, so the default here is
+    /// deliberately generous — LDAP/SAP-driven runs can produce slow bulk calls.
+    /// Lower it only if the endpoint is known to respond quickly.
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 300;
   }
 
-  public class ImportSqlConfig
+  /// <summary>
+  /// Inherits the connection fields from SamedisCare.Helper, so config.yml keeps its
+  /// database_type/server/port/... keys and nothing has to be copied across.
+  /// </summary>
+  public class ImportSqlConfig : DbConnectionSettings
   {
-    public DatabaseType DatabaseType { get; set; }
-    public string Server { get; set; } = "";
-    public string Port { get; set; } = "";
-    public string Database { get; set; } = "";
-    public string Username { get; set; } = "";
-    public string Password { get; set; } = "";
-    public bool AllowPublicKeyRetrieval { get; set; }
     public string StaffQuery { get; set; } = "";
   }
 

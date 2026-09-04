@@ -4,6 +4,8 @@ using System.DirectoryServices.Protocols;
 using System.Net;
 using Newtonsoft.Json;
 using System.Collections.Generic;
+using SamedisCare.Helper.Logging;
+using SamedisCare.Helper;
 
 namespace SamedisStaffSync
 {
@@ -35,7 +37,7 @@ namespace SamedisStaffSync
       LdapActiveColumn
     ];
 
-    public static DataSet FillDirectory(string ldapServer, bool Ssl, string ldapPath, string userName, string password, string jsonMapping, string filter, Helper helper, DateTime lastRun)
+    public static DataSet FillDirectory(string ldapServer, bool Ssl, string ldapPath, string userName, string password, string jsonMapping, string filter, ISyncLog log, DateTime lastRun)
     {
       var mapping = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonMapping) ?? throw new ArgumentException("JSON mapping could not be deserialized or is null.", nameof(jsonMapping));
       var configuredMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -99,7 +101,7 @@ namespace SamedisStaffSync
           int pageNumber = 0;
           int totalReturnedEntries = 0;
 
-          helper.Message($"LDAP search started. Path='{ldapPath}', Filter='{filter}', Scope='{SearchScope.Subtree}', PageSize={LdapPageSize}", 2);
+          log.Debug($"LDAP search started. Path='{ldapPath}', Filter='{filter}', Scope='{SearchScope.Subtree}', PageSize={LdapPageSize}");
 
           while (true)
           {
@@ -107,7 +109,7 @@ namespace SamedisStaffSync
             var searchResponse = (SearchResponse)ldapConnection.SendRequest(searchRequest);
             int pageReturnedEntries = searchResponse.Entries.Count;
             totalReturnedEntries += pageReturnedEntries;
-            helper.Message($"LDAP page {pageNumber}: returned {pageReturnedEntries} entries.", 2);
+            log.Debug($"LDAP page {pageNumber}: returned {pageReturnedEntries} entries.");
 
             // Iterate over results and add rows to DataTable.
             foreach (SearchResultEntry entry in searchResponse.Entries)
@@ -116,17 +118,17 @@ namespace SamedisStaffSync
               if (whenChangedAttr != null && whenChangedAttr.Count > 0)
               {
                 string whenChangedString = whenChangedAttr[0]?.ToString() ?? string.Empty;
-                if (DateTime.TryParseExact(whenChangedString, "yyyyMMddHHmmss.0Z", null, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime whenChanged))
+                if (Dates.TryParseGeneralizedTime(whenChangedString, out DateTime whenChanged))
                 {
                   if (whenChanged <= lastRun)
                   {
-                    helper.Message($"SKIP: record not changed", 2);
+                    log.Debug($"SKIP: record not changed");
                     continue; // Skip records that have not been changed since the last run.
                   }
                 }
                 else
                 {
-                  helper.Message($"Failed to parse whenChanged value: {whenChangedString}");
+                  log.Info($"Failed to parse whenChanged value: {whenChangedString}");
                   continue; // Skip records with invalid whenChanged value.
                 }
               }
@@ -176,7 +178,7 @@ namespace SamedisStaffSync
                   }
                 }
                 else
-                  helper.Message($"Failed to parse userAccountControl value: {userAccountControlString}");
+                  log.Info($"Failed to parse userAccountControl value: {userAccountControlString}");
               }
 
               row[LdapActiveColumn] = ldapAccountActive ? "true" : "false";
@@ -200,17 +202,23 @@ namespace SamedisStaffSync
             pageRequestControl.Cookie = pageResponseControl.Cookie;
           }
 
-          helper.Message($"LDAP search completed. Path='{ldapPath}', Filter='{filter}', ReturnedEntries={totalReturnedEntries}, ImportedRows={dataTable.Rows.Count}");
+          log.Info($"LDAP search completed. Path='{ldapPath}', Filter='{filter}', ReturnedEntries={totalReturnedEntries}, ImportedRows={dataTable.Rows.Count}");
         }
       }
       catch (LdapException ex)
       {
-        helper.MessageAndExit($"LDAP Exception: {ex.Message}");
+        // Exit is explicit here rather than hidden in a helper, so it is obvious
+        // at the call site that an LDAP failure ends the run.
+        log.Error($"LDAP Exception: {ex.Message}");
+        Environment.Exit(1);
         // Handle the exception based on your application's requirements
       }
       catch (Exception ex)
       {
-        helper.MessageAndExit($"General Exception: {ex.Message}");
+        // Exit is explicit here rather than hidden in a helper, so it is obvious
+        // at the call site that an LDAP failure ends the run.
+        log.Error($"General Exception: {ex.Message}");
+        Environment.Exit(1);
         // Handle the exception based on your application's requirements
       }
 

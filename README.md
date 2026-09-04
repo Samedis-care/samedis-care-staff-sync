@@ -3,6 +3,19 @@
 .Net Core project to read excel file or query from any sql server source and insert or update staff records.
 You can fork with project and modify it to your own needs.
 
+## Shared libraries
+
+This tool no longer carries its own copy of the API layer. It consumes:
+
+| Package | What comes from it |
+| --- | --- |
+| `SamedisCare.Api` | Auth, HTTP, gridfilter, tenant scope, record lookup |
+| `SamedisCare.Helper` | Logging, dates, CSV, config |
+
+The packages live in [samedis-care-dotnet](https://github.com/Samedis-care/samedis-care-dotnet).
+Their versions are pinned in the `.csproj`; a local folder feed for trying an unpublished
+change is described in that repository's README.
+
 ## Setup
 
 1. Copy and modify `config.yml.example` to `config.yml`
@@ -10,6 +23,16 @@ You can fork with project and modify it to your own needs.
 3. Compile the application to your target OS, modify `SamedisStaffSync.csproj` to your requirements
    - Follow https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview?tabs=cli for more details on compile and deploy
 4. Run the application manually or setup a `cron task` or `task` on windows systems.
+
+## Tests
+
+```bash
+dotnet test -c Release
+```
+
+`tests/fixtures/` holds an anonymised import file of thirty employees, five positions and the
+eight departments samedis-care-external-sync's fixtures create — so a full test runs
+external-sync first, then this tool, and the staff land in departments that exist.
 
 ## Proxy server support
 

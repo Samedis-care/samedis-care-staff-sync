@@ -1,4 +1,9 @@
 using System.Data;
+using SamedisCare.Api.V4.Public;
+using SamedisCare.Api.Common;
+using SamedisCare.Helper;
+using SamedisCare.Helper.Logging;
+using SamedisCare.Helper.Text;
 
 namespace SamedisStaffSync
 {
@@ -47,7 +52,7 @@ namespace SamedisStaffSync
     /// Personalnummer, Vorname, Nachname, Titel, Email, Handynummer, Bemerkungen, Status, Eintritt, Austritt,
     /// Abteilung, Abteilungstext, Kostenstelle, Position, Dienstart, DienstartText
     /// </summary>
-    public static SapImportResult Import(string csvPath, Helper helper)
+    public static SapImportResult Import(string csvPath, ISyncLog log, string delimiter)
     {
       if (!File.Exists(csvPath))
       {
@@ -55,7 +60,7 @@ namespace SamedisStaffSync
       }
 
       // Read the CSV as DataTable using existing helper (keeps project consistency)
-      DataTable raw = Helper.ReadCsvWithCsvHelper(csvPath, hasHeader: true);
+      DataTable raw = Csv.Read(csvPath, hasHeader: true, delimiter);
       var columnNames = raw.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToList();
 
       static string GetCell(DataRow row, params string[] names)
@@ -213,7 +218,7 @@ namespace SamedisStaffSync
       var ds = new DataSet();
       ds.Tables.Add(table);
 
-      helper?.Message($"SAP Import: raw rows: {records.Count}, unique employees: {consolidated.Count}, dienst-arten: {uniqueDienstarten.Count}", 1);
+      log.Info($"SAP Import: raw rows: {records.Count}, unique employees: {consolidated.Count}, dienst-arten: {uniqueDienstarten.Count}");
 
       return new SapImportResult
       {
@@ -225,26 +230,12 @@ namespace SamedisStaffSync
     private static string Prefer(string s)
       => string.IsNullOrWhiteSpace(s) ? string.Empty : s.Trim();
 
+    // de-DE with AssumeLocal preserved from the previous implementation: SAP exports
+    // carry local dates without a timezone, and normalizing them would shift the day.
     private static bool TryParseDate(string input, out DateTime date)
-    {
-      date = default;
-      if (string.IsNullOrWhiteSpace(input)) return false;
-
-      var styles = System.Globalization.DateTimeStyles.AssumeLocal;
-      // Try common formats: dd.MM.yyyy, yyyy-MM-dd, dd.MM.yy
-      string[] fmts = ["dd.MM.yyyy", "yyyy-MM-dd", "dd.MM.yy", "d.M.yyyy", "d.M.yy"];
-      if (DateTime.TryParseExact(input.Trim(), fmts, System.Globalization.CultureInfo.GetCultureInfo("de-DE"), styles, out var exact))
-      {
-        date = exact;
-        return true;
-      }
-      // Fallback to general parse
-      if (DateTime.TryParse(input, System.Globalization.CultureInfo.GetCultureInfo("de-DE"), styles, out var parsed))
-      {
-        date = parsed;
-        return true;
-      }
-      return false;
-    }
+      => Dates.TryParse(input, out date,
+                        formats: new[] { "dd.MM.yyyy", "yyyy-MM-dd", "dd.MM.yy", "d.M.yyyy", "d.M.yy" },
+                        culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE"),
+                        styles: System.Globalization.DateTimeStyles.AssumeLocal);
   }
 }
