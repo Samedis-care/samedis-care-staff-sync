@@ -27,10 +27,13 @@ internal class Program
     // Bootstrap logger with the previous defaults (level 1, console + file), because the
     // config that carries the real level and mode is only read below - and reading it can
     // already fail and needs to log.
-    // Formatted invariantly, not with ToShortDateString(): that is culture-dependent and
-    // yields "8/30/2026" in several cultures, whose slash turns the file name into a
-    // directory path. yyyy-MM-dd also sorts.
-    var logFile = Path.Combine("log", $"Logfile_{DateTime.Now:yyyy-MM-dd}.log");
+    // The name comes from LogFormat, which owns the ISO format on both ends: log-monitor
+    // reads these files and its TryParseFileName accepts only Logfile_yyyy-MM-dd.log.
+    // Building it here was culture-dependent despite the comment that used to sit on this
+    // line -- an interpolated hole formats with CurrentCulture even with a fixed specifier,
+    // so it yielded Logfile_2569-09-10.log on th-TH and Logfile_1448-03-28.log on ar-SA. The
+    // monitor then falls back to the file's LastWriteTime and goes blind to a stale run.
+    var logFile = Path.Combine("log", LogFormat.FileName(DateTime.Now));
     ISyncLog log = new FileSyncLog(1, SamedisCare.Helper.Logging.LogMode.Both, logFile);
 
     // read config
