@@ -27,10 +27,13 @@ internal class Program
     // Bootstrap logger with the previous defaults (level 1, console + file), because the
     // config that carries the real level and mode is only read below - and reading it can
     // already fail and needs to log.
-    // Formatted invariantly, not with ToShortDateString(): that is culture-dependent and
-    // yields "8/30/2026" in several cultures, whose slash turns the file name into a
-    // directory path. yyyy-MM-dd also sorts.
-    var logFile = Path.Combine("log", $"Logfile_{DateTime.Now:yyyy-MM-dd}.log");
+    // The name comes from LogFormat, which owns the ISO format on both ends: log-monitor
+    // reads these files and its TryParseFileName accepts only Logfile_yyyy-MM-dd.log.
+    // Building it here was culture-dependent despite the comment that used to sit on this
+    // line -- an interpolated hole formats with CurrentCulture even with a fixed specifier,
+    // so it yielded Logfile_2569-09-10.log on th-TH and Logfile_1448-03-28.log on ar-SA. The
+    // monitor then falls back to the file's LastWriteTime and goes blind to a stale run.
+    var logFile = Path.Combine("log", LogFormat.FileName(DateTime.Now));
     ISyncLog log = new FileSyncLog(1, SamedisCare.Helper.Logging.LogMode.Both, logFile);
 
     // read config
@@ -293,35 +296,24 @@ internal class Program
           continue;
         }
 
-        //validate date fields
-        var tmpJoin = row["Beitritt am"]?.ToString();
-        if (!string.IsNullOrEmpty(tmpJoin) && Dates.TryParseGeneralizedTime(tmpJoin, out DateTime parsedJoin))
-          tmpJoin = parsedJoin.ToString("dd.MM.yyyy");
-        else
+        // Validate date fields. The logic lives in Helper.PrepareStaffDates so it can be
+        // tested; the log lines stay here because they quote the row's raw values.
+        string tmpJoin, tmpLeft;
+        switch (Helper.PrepareStaffDates(row["Beitritt am"]?.ToString(), row["Austritt am"]?.ToString(),
+                                         out tmpJoin, out tmpLeft))
         {
-          log.Info($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Beitritt am"]}");
-          continue;
-        }
-        var tmpLeft = row["Austritt am"].ToString();
-        if (tmpLeft?.ToString().Length > 0)
-        {
-          if (Dates.TryParseGeneralizedTime(tmpLeft, out DateTime parsedLeft))
-            tmpLeft = parsedLeft.ToString("dd.MM.yyyy");
-          else
-          {
+          case Helper.StaffDateVerdict.JoinMissingOrUnreadable:
+            log.Info($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Beitritt am"]}");
+            continue;
+          case Helper.StaffDateVerdict.LeftUnreadable:
             log.Info($"SKIP: Invalid left date for \"{row["Nachname"]}\": {row["Austritt am"]}");
             continue;
-          }
-          if (Convert.ToDateTime(tmpLeft) < Convert.ToDateTime(tmpJoin))
-          {
+          case Helper.StaffDateVerdict.LeftBeforeJoin:
             log.Info($"SKIP: Left date {row["Austritt am"]} is before join date {row["Beitritt am"]} for \"{row["Nachname"]}\".");
             continue;
-          }
-          if (Convert.ToDateTime(tmpLeft) > DateTime.Now.AddYears(10))
-          {
+          case Helper.StaffDateVerdict.LeftTooFarInTheFuture:
             log.Info($"SKIP: Left date {row["Austritt am"]}, please leave this field blank instead of using dates far in the future for \"{row["Nachname"]}\".");
             continue;
-          }
         }
 
         var attributes = new Staffs.Attributes

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System;
 using System.Data;
 using System.DirectoryServices.Protocols;
@@ -174,7 +175,8 @@ namespace SamedisStaffSync
                     ldapAccountActive = false;
                     var existingLeft = row["Austritt am"]?.ToString();
                     if (string.IsNullOrWhiteSpace(existingLeft))
-                      row["Austritt am"] = DateTime.Now.ToString("dd.MM.yyyy");
+                      // Invariant: this lands in the same column the import reads back.
+                      row["Austritt am"] = DateTime.Now.ToString(Helper.StaffDateFormat, CultureInfo.InvariantCulture);
                   }
                 }
                 else

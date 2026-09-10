@@ -16,6 +16,20 @@ namespace SamedisStaffSync
     // specific to this import.
 
     /// <summary>
+    /// The date format the staff import passes between its own parts, and the one the API
+    /// receives in <c>Staffs.Attributes.Joined</c> / <c>.Left</c>.
+    /// </summary>
+    /// <remarks>
+    /// Named because it is a contract across four files: HelperSap writes it into the
+    /// DataTable, LdapHelper writes a leaving date into the same column, Program reformats
+    /// and sends it, and <c>TryParseStaffDate</c> below reads it back. Always format and parse
+    /// it with <see cref="CultureInfo.InvariantCulture"/> -- the ambient culture put the
+    /// host's calendar into the value (30.04.2569 on th-TH) and made the day-first spelling
+    /// unreadable on en-US. See samedis-care-issues#2886.
+    /// </remarks>
+    public const string StaffDateFormat = "dd.MM.yyyy";
+
+    /// <summary>
     /// Returns true when every field in the outgoing payload already matches the remote attributes.
     /// Lists are compared as unordered sets (e.g. department_ids, position_ids). Date fields are
     /// compared as parsed DateTime values so dd.MM.yyyy vs ISO formats round-trip cleanly.
@@ -75,12 +89,66 @@ namespace SamedisStaffSync
       return true;
     }
 
+    /// <summary>Why a staff row's dates were rejected, or <see cref="StaffDateVerdict.Ok"/>.</summary>
+    public enum StaffDateVerdict
+    {
+      Ok,
+      JoinMissingOrUnreadable,
+      LeftUnreadable,
+      LeftBeforeJoin,
+      LeftTooFarInTheFuture,
+    }
+
+    /// <summary>
+    /// Validates a staff row's join and leaving date and renders both in
+    /// <see cref="StaffDateFormat"/> for the API.
+    /// </summary>
+    /// <remarks>
+    /// Extracted from the import loop so it can be tested: it used to format with the ambient
+    /// culture and then re-parse its own output with <c>Convert.ToDateTime</c>, which reads a
+    /// day-first date only where the culture is day-first. On en-US, or in a container with no
+    /// locale, the first row carrying a leaving date threw an uncaught FormatException and
+    /// aborted the import; on th-TH the year written to the API was Buddhist. Both are gone
+    /// now: formatting is invariant and the comparisons use the parsed values, which were
+    /// already in hand. See samedis-care-issues#2886.
+    /// </remarks>
+    /// <param name="rawJoin">The <c>Beitritt am</c> cell, in whatever the source wrote.</param>
+    /// <param name="rawLeft">The <c>Austritt am</c> cell; empty means "still employed".</param>
+    /// <param name="join">The join date for the API, or empty when the verdict is not Ok.</param>
+    /// <param name="left">The leaving date for the API, empty when the row has none.</param>
+    public static StaffDateVerdict PrepareStaffDates(string? rawJoin, string? rawLeft,
+                                                     out string join, out string left)
+    {
+      join = string.Empty;
+      left = string.Empty;
+
+      if (string.IsNullOrEmpty(rawJoin) || !Dates.TryParseGeneralizedTime(rawJoin, out var parsedJoin))
+        return StaffDateVerdict.JoinMissingOrUnreadable;
+
+      join = parsedJoin.ToString(StaffDateFormat, CultureInfo.InvariantCulture);
+
+      if (string.IsNullOrEmpty(rawLeft))
+        return StaffDateVerdict.Ok;
+
+      if (!Dates.TryParseGeneralizedTime(rawLeft, out var parsedLeft))
+        return StaffDateVerdict.LeftUnreadable;
+
+      if (parsedLeft < parsedJoin)
+        return StaffDateVerdict.LeftBeforeJoin;
+
+      if (parsedLeft > DateTime.Now.AddYears(10))
+        return StaffDateVerdict.LeftTooFarInTheFuture;
+
+      left = parsedLeft.ToString(StaffDateFormat, CultureInfo.InvariantCulture);
+      return StaffDateVerdict.Ok;
+    }
+
     // Styles are passed explicitly to keep the previous behaviour exactly: the known
     // dd.MM.yyyy form must NOT be normalized to UTC (that would move midnight to the
     // previous day at a positive offset), while the fallback still normalizes.
     private static bool TryParseStaffDate(string s, out DateTime date)
       => Dates.TryParse(s, out date,
-                        formats: new[] { "dd.MM.yyyy" },
+                        formats: new[] { StaffDateFormat },
                         culture: CultureInfo.InvariantCulture,
                         styles: DateTimeStyles.None,
                         fallbackStyles: DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
