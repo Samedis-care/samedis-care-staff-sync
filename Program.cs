@@ -296,35 +296,24 @@ internal class Program
           continue;
         }
 
-        //validate date fields
-        var tmpJoin = row["Beitritt am"]?.ToString();
-        if (!string.IsNullOrEmpty(tmpJoin) && Dates.TryParseGeneralizedTime(tmpJoin, out DateTime parsedJoin))
-          tmpJoin = parsedJoin.ToString("dd.MM.yyyy");
-        else
+        // Validate date fields. The logic lives in Helper.PrepareStaffDates so it can be
+        // tested; the log lines stay here because they quote the row's raw values.
+        string tmpJoin, tmpLeft;
+        switch (Helper.PrepareStaffDates(row["Beitritt am"]?.ToString(), row["Austritt am"]?.ToString(),
+                                         out tmpJoin, out tmpLeft))
         {
-          log.Info($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Beitritt am"]}");
-          continue;
-        }
-        var tmpLeft = row["Austritt am"].ToString();
-        if (tmpLeft?.ToString().Length > 0)
-        {
-          if (Dates.TryParseGeneralizedTime(tmpLeft, out DateTime parsedLeft))
-            tmpLeft = parsedLeft.ToString("dd.MM.yyyy");
-          else
-          {
+          case Helper.StaffDateVerdict.JoinMissingOrUnreadable:
+            log.Info($"SKIP: No or invalid join date for \"{row["Nachname"]}\": {row["Beitritt am"]}");
+            continue;
+          case Helper.StaffDateVerdict.LeftUnreadable:
             log.Info($"SKIP: Invalid left date for \"{row["Nachname"]}\": {row["Austritt am"]}");
             continue;
-          }
-          if (Convert.ToDateTime(tmpLeft) < Convert.ToDateTime(tmpJoin))
-          {
+          case Helper.StaffDateVerdict.LeftBeforeJoin:
             log.Info($"SKIP: Left date {row["Austritt am"]} is before join date {row["Beitritt am"]} for \"{row["Nachname"]}\".");
             continue;
-          }
-          if (Convert.ToDateTime(tmpLeft) > DateTime.Now.AddYears(10))
-          {
+          case Helper.StaffDateVerdict.LeftTooFarInTheFuture:
             log.Info($"SKIP: Left date {row["Austritt am"]}, please leave this field blank instead of using dates far in the future for \"{row["Nachname"]}\".");
             continue;
-          }
         }
 
         var attributes = new Staffs.Attributes

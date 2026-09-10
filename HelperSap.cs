@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using SamedisCare.Api.V4.Public;
 using SamedisCare.Api.Common;
 using SamedisCare.Helper;
@@ -195,8 +196,9 @@ namespace SamedisStaffSync
       foreach (var x in consolidated)
       {
         var f = x.First;
-        string joinStr = x.LatestJoin.HasValue ? x.LatestJoin.Value.ToString("dd.MM.yyyy") : string.Empty;
-        string leftStr = x.LatestLeft.HasValue ? x.LatestLeft.Value.ToString("dd.MM.yyyy") : string.Empty;
+        // Invariant: these strings are read back by TryParseStaffDate and sent to the API.
+        string joinStr = x.LatestJoin.HasValue ? x.LatestJoin.Value.ToString(Helper.StaffDateFormat, CultureInfo.InvariantCulture) : string.Empty;
+        string leftStr = x.LatestLeft.HasValue ? x.LatestLeft.Value.ToString(Helper.StaffDateFormat, CultureInfo.InvariantCulture) : string.Empty;
 
         table.Rows.Add(
           x.Key,
@@ -234,7 +236,7 @@ namespace SamedisStaffSync
     // carry local dates without a timezone, and normalizing them would shift the day.
     private static bool TryParseDate(string input, out DateTime date)
       => Dates.TryParse(input, out date,
-                        formats: new[] { "dd.MM.yyyy", "yyyy-MM-dd", "dd.MM.yy", "d.M.yyyy", "d.M.yy" },
+                        formats: new[] { Helper.StaffDateFormat, "yyyy-MM-dd", "dd.MM.yy", "d.M.yyyy", "d.M.yy" },
                         culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE"),
                         styles: System.Globalization.DateTimeStyles.AssumeLocal);
   }
