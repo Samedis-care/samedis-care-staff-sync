@@ -1,0 +1,4 @@
+# Die Fixture-CSV bildet den Export des Quellsystems nach, und dazu gehoert
+# dessen Zeilenende. Wuerde Git sie auf LF normalisieren, pruefte ein frischer
+# Klon eine Datei, wie sie beim Kunden nie ankommt.
+tests/fixtures/**/*.csv -text

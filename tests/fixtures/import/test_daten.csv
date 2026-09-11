@@ -1,0 +1,31 @@
+Vorname,Nachname,Mitarbeiternr.,Beitritt am,Austritt am,E-Mail,Titel,Bemerkungen,Handynummer,Positionen,Abteilungen,Abteilungstext,Kostenstelle
+Anna,Ahrens,P4200,01.01.2012,,anna.ahrens@musterklinik.example,,Bemerkung zu Mitarbeiter 1,+49 151 1000000,Applikationsbetreuer,41100,Innere Medizin,41100
+Bernd,Berger,P4203,02.02.2013,,bernd.berger@musterklinik.example,Dr.,,+49 151 1000037,MPB,41110,Kardiologie,41110
+Clara,Conrad,P4206,03.03.2014,,clara.conrad@musterklinik.example,,,+49 151 1000074,MPV,41200,Chirurgie,41200
+David,Dietrich,P4209,04.04.2015,,david.dietrich@musterklinik.example,,Bemerkung zu Mitarbeiter 4,+49 151 1000111,IT,41210,Unfallchirurgie,41210
+  Elena  ,Engel,P4212,05.05.2016,,elena.engel@musterklinik.example,Prof. Dr.,,+49 151 1000148,Medizintechnik,41300,Radiologie,41300
+Frank,Fischer,P4215,06.06.2017,,frank.fischer@musterklinik.example,,,+49 151 1000185,Applikationsbetreuer,41310,Nuklearmedizin,41310
+Greta,Gruber,P4218,07.07.2018,,greta.gruber@musterklinik.example,,Bemerkung zu Mitarbeiter 7,+49 151 1000222,MPB,41400,Anaesthesie,41400
+Hakan,Haas,P4221,08.08.2019,31.03.2026,hakan.haas@musterklinik.example,Dr.,,+49 151 1000259,MPV,41500,Zentrallabor,41500
+Ines,Iversen,P4224,09.09.2020,,ines.iversen@musterklinik.example,,,+49 151 1000296,IT,41100,Innere Medizin,41100
+Jonas,Jansen,P4227,10.10.2021,,,,Bemerkung zu Mitarbeiter 10,+49 151 1000333,Medizintechnik,41110,Kardiologie,41110
+Katrin,Keller,P4230,11.11.2022,,katrin.keller@musterklinik.example,Prof. Dr.,,+49 151 1000370,Applikationsbetreuer,41200,Chirurgie,41200
+Lars,Lindner,P4233,12.12.2023,,lars.lindner@musterklinik.example,,,+49 151 1000407,MPB,41210,Unfallchirurgie,41210
+Maria,Mayer,P4236,13.01.2012,,maria.mayer@musterklinik.example,,Bemerkung zu Mitarbeiter 13,+49 151 1000444,MPV,41300,Radiologie,41300
+Nils,Neumann,P4239,14.02.2013,,nils.neumann@musterklinik.example,Dr.,,+49 151 1000481,IT,41310,Nuklearmedizin,41310
+Olga,Ortmann,P4242,15.03.2014,,olga.ortmann@musterklinik.example,,,,Medizintechnik,41400,Anaesthesie,41400
+Peter,Pfeiffer,P4245,16.04.2015,,peter.pfeiffer@musterklinik.example,,Bemerkung zu Mitarbeiter 16,+49 151 1000555,Applikationsbetreuer,41500,Zentrallabor,41500
+Quirin,Quast,P4248,17.05.2016,,quirin.quast@musterklinik.example,Prof. Dr.,,+49 151 1000592,MPB,41100,Innere Medizin,41100
+Rosa,Richter,P4251,18.06.2017,,rosa.richter@musterklinik.example,,,+49 151 1000629,MPV,41110,Kardiologie,41110
+Sven,Schuster,P4254,19.07.2018,,sven.schuster@musterklinik.example,,Bemerkung zu Mitarbeiter 19,+49 151 1000666,IT,41200,Chirurgie,41200
+Tanja,Thiel,P4257,20.08.2019,,tanja.thiel@musterklinik.example,Dr. med. dent.,,+49 151 1000703,Medizintechnik,41210,Unfallchirurgie,41210
+Ulrich,Ulrich,P4260,21.09.2020,,ulrich.ulrich@musterklinik.example,,,+49 151 1000740,Applikationsbetreuer,41300,Radiologie,41300
+Vera,Vogel,P4263,22.10.2021,,vera.vogel@musterklinik.example,,Bemerkung zu Mitarbeiter 22,+49 151 1000777,MPB,41310,Nuklearmedizin,41310
+Wilhelm,Wagner,P4266,23.11.2022,31.03.2026,wilhelm.wagner@musterklinik.example,Prof. Dr.,,+49 151 1000814,MPV,41400,Anaesthesie,41400
+Xenia,Xander,P4269,24.12.2023,,xenia.xander@musterklinik.example,,,+49 151 1000851,IT,41500,Zentrallabor,41500
+Yannick,Yilmaz,P4272,25.01.2012,,yannick.yilmaz@musterklinik.example,,Bemerkung zu Mitarbeiter 25,+49 151 1000888,Medizintechnik,41100,Innere Medizin,41100
+Zoe,Zimmer,P4275,26.02.2013,,zoe.zimmer@musterklinik.example,Dr.,,+49 151 1000925,Applikationsbetreuer,41110,Kardiologie,41110
+Amelie,Albrecht,P4278,27.03.2014,,amelie.albrecht@musterklinik.example,,,+49 151 1000962,MPB,41200,Chirurgie,41200
+Bastian,Brandt,P4281,28.04.2015,,bastian.brandt@musterklinik.example,,Bemerkung zu Mitarbeiter 28,+49 151 1000999,MPV,41210,Unfallchirurgie,41210
+Carla,Clemens,P4284,01.05.2016,,carla.clemens@musterklinik.example,Prof. Dr.,,+49 151 1001036,IT,41300,Radiologie,41300
+Dennis,Dorn,P4287,02.06.2017,,dennis.dorn@musterklinik.example,,,+49 151 1001073,Medizintechnik,41310,Nuklearmedizin,41310
