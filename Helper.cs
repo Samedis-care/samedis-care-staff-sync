@@ -3,8 +3,11 @@ using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Reflection;
+using SamedisCare.Api.Http;
+using SamedisCare.Api.Lookup;
 using SamedisCare.Api.V4.Public;
 using SamedisCare.Helper;
+using SamedisCare.Helper.Logging;
 using SamedisCare.Helper.Text;
 
 namespace SamedisStaffSync
@@ -282,6 +285,54 @@ namespace SamedisStaffSync
         Positions = positions.OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList(),
         Departments = departments
       };
+    }
+
+    /// <summary>
+    /// Resolves the positions and departments the source refers to into the two maps, creating
+    /// or updating them when the config asks for it.
+    /// <para>
+    /// A dry run (<see cref="IApiClient.TestMode"/>) only looks up: the client does not suppress
+    /// writes on its own, so a create here would land in the customer's tenant. What a live run
+    /// would write is logged instead, so the dry run still says what it would change.
+    /// </para>
+    /// </summary>
+    public static void ResolveOrgIds(IApiClient client, ResourceLookup positionLookup,
+                                     ResourceLookup departmentLookup, UniqueOrgData orgData,
+                                     bool createPositions, bool createDepartments, ISyncLog log,
+                                     IDictionary<string, string> positionIdsByTitle,
+                                     IDictionary<string, string> departmentIdsByTitle)
+    {
+      foreach (var posTitle in orgData.Positions)
+      {
+        if (string.IsNullOrWhiteSpace(posTitle)) continue;
+        string? pid;
+        if (createPositions && !client.TestMode)
+          pid = Positions.FindOrCreatePosition(client, positionLookup, posTitle, log);
+        else
+        {
+          pid = Positions.FindPositionId(positionLookup, posTitle);
+          if (createPositions && string.IsNullOrEmpty(pid))
+            log.Info($"Test mode: would create position '{posTitle}'.");
+        }
+        if (!string.IsNullOrEmpty(pid)) positionIdsByTitle[posTitle] = pid!;
+      }
+
+      foreach (var dep in orgData.Departments.Values)
+      {
+        if (string.IsNullOrWhiteSpace(dep.Title)) continue;
+        string? did;
+        if (createDepartments && !client.TestMode)
+          did = Departments.FindOrCreateDepartment(client, departmentLookup, dep, log);
+        else
+        {
+          did = Departments.FindDepartmentId(departmentLookup, dep.Title);
+          if (createDepartments)
+            log.Info(string.IsNullOrEmpty(did)
+              ? $"Test mode: would create department '{dep.Title}'."
+              : $"Test mode: would update department '{dep.Title}' (active, cost center).");
+        }
+        if (!string.IsNullOrEmpty(did)) departmentIdsByTitle[dep.Key] = did!;
+      }
     }
   }
 
