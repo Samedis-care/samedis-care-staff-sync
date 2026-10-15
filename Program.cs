@@ -220,23 +220,9 @@ internal class Program
       var positionLookup = new ResourceLookup(samedisClient, scope.Resource("positions"), scope.KeyLookup);
       var departmentLookup = new ResourceLookup(samedisClient, scope.Resource("departments"), scope.KeyLookup);
 
-      foreach (var posTitle in orgData.Positions)
-      {
-        if (string.IsNullOrWhiteSpace(posTitle)) continue;
-        var pid = config.Options.CreatePositions
-          ? Positions.FindOrCreatePosition(samedisClient, positionLookup, posTitle, log)
-          : Positions.FindPositionId(positionLookup, posTitle);
-        if (!string.IsNullOrEmpty(pid)) positionIdsByTitle[posTitle] = pid!;
-      }
-
-      foreach (var dep in orgData.Departments.Values)
-      {
-        if (string.IsNullOrWhiteSpace(dep.Title)) continue;
-        var did = config.Options.CreateDepartments
-          ? Departments.FindOrCreateDepartment(samedisClient, departmentLookup, dep, log)
-          : Departments.FindDepartmentId(departmentLookup, dep.Title);
-        if (!string.IsNullOrEmpty(did)) departmentIdsByTitle[dep.Key] = did!;
-      }
+      OrgDataHelper.ResolveOrgIds(samedisClient, positionLookup, departmentLookup, orgData,
+                                  config.Options.CreatePositions, config.Options.CreateDepartments,
+                                  log, positionIdsByTitle, departmentIdsByTitle);
     }
 
     if (testMode)
