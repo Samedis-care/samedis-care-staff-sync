@@ -130,5 +130,7 @@ For example if you want to read your employee number from the field `extensionAt
   mapping: "{ \"Nachname\": \"sn\", \"Vorname\": \"givenName\", \"Mitarbeiternr.\": \"extensionAttribute4\", \"Beitritt am\": \"whenCreated\", \"Austritt am\": \"extensionAttribute10\", \"E-Mail\": \"mail\", \"Titel\": \"title\", \"Bemerkungen\": \"info\", \"Handynummer\": \"mobile\" }"
 ```
 
+**Search base (`path`):** The sync only sees accounts below `path`. If your deactivation process moves accounts into another OU (for example an "Inactive" OU), `path` must cover that OU as well, otherwise the sync never sees the disabled account and cannot set the `left` date. Use a common parent OU or the domain root (e.g. `DC=example,DC=local`). The account must also keep matching the `filter` after deactivation (e.g. stay a member of the sync group).
+
 **Note:** If you do deactivate the user in your active directory we will set the `left` date to the timestamp of the sync as alternative, if you can not provide a proper field (in our example it is `extensionAttribute10`) to define the date the employee left.
 

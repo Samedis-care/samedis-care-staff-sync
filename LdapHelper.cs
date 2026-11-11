@@ -77,6 +77,13 @@ namespace SamedisStaffSync
           // Set LDAP version to 3
           ldapConnection.SessionOptions.ProtocolVersion = 3;
 
+          // Do not chase referrals. A search based at the domain root makes AD return
+          // continuation references (DomainDnsZones, ForestDnsZones, Configuration). When
+          // they are chased, the paged-results response control gets lost and the paging
+          // loop below ends silently after the first page. Those partitions hold no user
+          // objects, so nothing is missed by ignoring them.
+          ldapConnection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+
           // Optional: Use SSL/TLS
           if (Ssl)
           {
@@ -199,7 +206,13 @@ namespace SamedisStaffSync
             }
 
             if (pageResponseControl == null || pageResponseControl.Cookie == null || pageResponseControl.Cookie.Length == 0)
+            {
+              // A full page without a paging control usually means the server dropped it,
+              // so there may be more entries that were never read.
+              if (pageResponseControl == null && pageReturnedEntries >= LdapPageSize)
+                log.Warn($"LDAP page {pageNumber} was full ({pageReturnedEntries} entries) but carried no paging control. The result may be incomplete; check the search base '{ldapPath}'.");
               break;
+            }
 
             pageRequestControl.Cookie = pageResponseControl.Cookie;
           }
