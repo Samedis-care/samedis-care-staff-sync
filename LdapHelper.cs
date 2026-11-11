@@ -80,8 +80,9 @@ namespace SamedisStaffSync
           // Do not chase referrals. A search based at the domain root makes AD return
           // continuation references (DomainDnsZones, ForestDnsZones, Configuration). When
           // they are chased, the paged-results response control gets lost and the paging
-          // loop below ends silently after the first page. Those partitions hold no user
-          // objects, so nothing is missed by ignoring them.
+          // loop below ends silently after the first page. The DNS and Configuration
+          // partitions hold no user objects. Child domains of a multi-domain forest do;
+          // they are not followed either and are logged as continuation references below.
           ldapConnection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
 
           // Optional: Use SSL/TLS
@@ -116,6 +117,13 @@ namespace SamedisStaffSync
             pageNumber++;
             var searchResponse = (SearchResponse)ldapConnection.SendRequest(searchRequest);
             int pageReturnedEntries = searchResponse.Entries.Count;
+
+            // With chasing off, a base DN outside the server's naming context comes back as a
+            // referral with no entries. LdapConnection treats that as success, so say so.
+            if (searchResponse.ResultCode == ResultCode.Referral || searchResponse.ResultCode == ResultCode.ReferralV2)
+              log.Warn($"LDAP server referred the search for '{ldapPath}' to {string.Join(", ", searchResponse.Referral.Select(u => u.ToString()))}; referrals are not followed. Point 'server' at a DC of that domain.");
+            foreach (SearchResultReference reference in searchResponse.References)
+              log.Debug($"LDAP continuation reference not followed: {string.Join(", ", reference.Reference.Select(u => u.ToString()))}");
             totalReturnedEntries += pageReturnedEntries;
             log.Debug($"LDAP page {pageNumber}: returned {pageReturnedEntries} entries.");
 
